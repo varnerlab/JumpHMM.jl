@@ -58,9 +58,6 @@ end
 
 # --- Private helpers -------------------------------------------------------
 
-"""
-Wasserstein-1 distance between two samples (equal or unequal length).
-"""
 function _wasserstein1(x::AbstractVector{Float64}, y::AbstractVector{Float64})
     sx = sort(x)
     sy = sort(y)
@@ -75,9 +72,6 @@ function _wasserstein1(x::AbstractVector{Float64}, y::AbstractVector{Float64})
     end
 end
 
-"""
-Hellinger distance between two samples (histogram-based).
-"""
 function _hellinger(x::AbstractVector{Float64}, y::AbstractVector{Float64})
     # common bin edges
     lo = min(minimum(x), minimum(y))

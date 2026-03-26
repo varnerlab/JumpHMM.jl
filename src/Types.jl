@@ -1,6 +1,11 @@
 # --- Abstract Types -------------------------------------------------------
+"""Supertype for all Markov models in the package."""
 abstract type AbstractMarkovModel end
+
+"""Supertype for copula-based and factor-based dependence models."""
 abstract type AbstractDependenceModel end
+
+"""Supertype for validation report types."""
 abstract type AbstractValidationResult end
 
 # --- State Partition -------------------------------------------------------

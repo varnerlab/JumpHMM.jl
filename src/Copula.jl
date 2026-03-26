@@ -61,9 +61,6 @@ end
 
 # --- Private helpers -------------------------------------------------------
 
-"""
-Probability Integral Transform: map each column to uniform [0,1] via empirical CDF.
-"""
 function _pit(data::AbstractMatrix{Float64})
     n, d = size(data)
     U = Matrix{Float64}(undef, n, d)
@@ -74,9 +71,6 @@ function _pit(data::AbstractMatrix{Float64})
     return U
 end
 
-"""
-Log-likelihood of a Student-t copula (for profile MLE over ν).
-"""
 function _copula_loglik(U::Matrix{Float64}, Σ::Matrix{Float64}, ν::Float64)
     n, d = size(U)
     # transform uniform marginals to t-quantiles
