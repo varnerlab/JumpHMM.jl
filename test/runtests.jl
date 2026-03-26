@@ -4,6 +4,7 @@ using Random
 using Statistics
 using Distributions
 using LinearAlgebra
+using StatsBase: corspearman
 
 # resolve ambiguity: JumpHMM.fit vs Distributions.fit
 const fit = JumpHMM.fit
@@ -17,5 +18,6 @@ include("test_decode.jl")
 include("test_tune.jl")
 include("test_validate.jl")
 include("test_copula.jl")
+include("test_vine.jl")
 include("test_sim.jl")
 include("test_portfolio.jl")

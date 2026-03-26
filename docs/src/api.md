@@ -33,7 +33,19 @@ JumpHMM.ValidationReport
 ```@docs
 JumpHMM.GaussianCopula
 JumpHMM.StudentTCopula
+JumpHMM.VineCopula
 JumpHMM.SingleIndexModel
+```
+
+### Bivariate Copula Families
+```@docs
+JumpHMM.AbstractBivariateCopula
+JumpHMM.GaussianBiCopula
+JumpHMM.StudentTBiCopula
+JumpHMM.ClaytonBiCopula
+JumpHMM.GumbelBiCopula
+JumpHMM.FrankBiCopula
+JumpHMM.VineEdge
 ```
 
 ### Portfolio Types
@@ -50,6 +62,7 @@ JumpHMM.fit(::Type{JumpHiddenMarkovModel}, ::AbstractVector{<:Real})
 JumpHMM.fit(::Type{LaplacePartition}, ::AbstractVector{Float64})
 JumpHMM.fit(::Type{GaussianCopula}, ::AbstractMatrix{Float64})
 JumpHMM.fit(::Type{StudentTCopula}, ::AbstractMatrix{Float64})
+JumpHMM.fit(::Type{VineCopula}, ::AbstractMatrix{Float64})
 JumpHMM.fit(::Type{SingleIndexModel}, ::AbstractMatrix{Float64}, ::AbstractVector{Float64})
 JumpHMM.fit(::Type{PortfolioModel}, ::Vector{String}, ::AbstractMatrix{<:Real})
 JumpHMM.assign_states
@@ -88,6 +101,7 @@ JumpHMM.validate(::PortfolioModel, ::AbstractMatrix{<:Real})
 ```@docs
 JumpHMM.sample_dependence(::GaussianCopula, ::Int)
 JumpHMM.sample_dependence(::StudentTCopula, ::Int)
+JumpHMM.sample_dependence(::VineCopula, ::Int)
 JumpHMM.sample_dependence(::SingleIndexModel, ::Int)
 ```
 

@@ -160,6 +160,61 @@ struct StudentTCopula <: AbstractDependenceModel
     ν::Float64
 end
 
+# --- Bivariate Copula Families (for Vine Copulas) --------------------------
+"""Supertype for bivariate copula families used in vine copula construction."""
+abstract type AbstractBivariateCopula end
+
+"""Gaussian bivariate copula with correlation parameter ρ ∈ (-1, 1)."""
+struct GaussianBiCopula <: AbstractBivariateCopula
+    ρ::Float64
+end
+
+"""Student-t bivariate copula with correlation ρ and degrees of freedom ν."""
+struct StudentTBiCopula <: AbstractBivariateCopula
+    ρ::Float64
+    ν::Float64
+end
+
+"""Clayton bivariate copula with parameter θ > 0. Lower tail dependence."""
+struct ClaytonBiCopula <: AbstractBivariateCopula
+    θ::Float64
+end
+
+"""Gumbel bivariate copula with parameter θ ≥ 1. Upper tail dependence."""
+struct GumbelBiCopula <: AbstractBivariateCopula
+    θ::Float64
+end
+
+"""Frank bivariate copula with parameter θ ≠ 0. No tail dependence, symmetric."""
+struct FrankBiCopula <: AbstractBivariateCopula
+    θ::Float64
+end
+
+"""
+    VineEdge
+
+One edge in a vine copula tree, representing a conditional bivariate copula.
+"""
+struct VineEdge
+    var1::Int
+    var2::Int
+    conditioned::Vector{Int}
+    copula::AbstractBivariateCopula
+end
+
+"""
+    VineCopula <: AbstractDependenceModel
+
+C-vine copula: each pair of assets gets its own bivariate copula family,
+allowing heterogeneous dependence (e.g., heavy-tailed for tech pairs,
+asymmetric for energy-finance). Automatic family selection via AIC.
+"""
+struct VineCopula <: AbstractDependenceModel
+    d::Int
+    order::Vector{Int}
+    edges::Vector{Vector{VineEdge}}
+end
+
 """
     SingleIndexModel <: AbstractDependenceModel
 

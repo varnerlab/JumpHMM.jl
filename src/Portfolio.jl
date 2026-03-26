@@ -15,7 +15,7 @@ function fit(::Type{PortfolioModel}, tickers::Vector{String},
 
     returns = excess_growth_rates(prices; rf=rf, dt=dt)
 
-    if dependence <: Union{GaussianCopula,StudentTCopula}
+    if dependence <: Union{GaussianCopula,StudentTCopula,VineCopula}
         # fit marginal HMMs per asset
         marginals = Dict{String,JumpHiddenMarkovModel}()
         for (j, ticker) in enumerate(tickers)
@@ -114,7 +114,7 @@ function simulate(portfolio::PortfolioModel, n_steps::Int;
     tickers = portfolio.tickers
     results = Dict{String,SimulationResult}()
 
-    if dep isa Union{GaussianCopula,StudentTCopula}
+    if dep isa Union{GaussianCopula,StudentTCopula,VineCopula}
         # copula approach: simulate each marginal, correlate via copula
         for path_idx in 1:n_paths
             # sample correlated uniforms

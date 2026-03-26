@@ -22,6 +22,7 @@ include("Decode.jl")
 include("Tune.jl")
 include("Validate.jl")
 include("Copula.jl")
+include("Vine.jl")
 include("SIM.jl")
 include("Portfolio.jl")
 
@@ -59,6 +60,9 @@ export JumpHiddenMarkovModel
 export SimulationPath, SimulationResult
 export PathTestResult, ValidationReport
 export GaussianCopula, StudentTCopula, SingleIndexModel
+export AbstractBivariateCopula, GaussianBiCopula, StudentTBiCopula
+export ClaytonBiCopula, GumbelBiCopula, FrankBiCopula
+export VineEdge, VineCopula
 export PortfolioModel, PortfolioSimulationResult
 
 # functions

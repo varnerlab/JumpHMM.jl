@@ -21,6 +21,7 @@ makedocs(
 
         "Multi-Asset" => [
             "Copulas" => "copulas.md",
+            "Vine Copula" => "vine.md",
             "Single-Index Model" => "sim.md",
             "Portfolio" => "portfolio.md",
         ],
