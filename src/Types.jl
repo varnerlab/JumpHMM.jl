@@ -225,6 +225,8 @@ struct SingleIndexModel <: AbstractDependenceModel
     α::Vector{Float64}
     β::Vector{Float64}
     σ_ε::Vector{Float64}
+    residuals::Matrix{Float64}
+    residual_method::Symbol
     market_model::JumpHiddenMarkovModel
 end
 

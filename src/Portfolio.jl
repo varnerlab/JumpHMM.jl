@@ -8,7 +8,8 @@ function fit(::Type{PortfolioModel}, tickers::Vector{String},
              dependence::Type{<:AbstractDependenceModel}=StudentTCopula,
              market::String="",
              rf::Float64=0.0, N::Int=100, ν::Float64=5.0,
-             dt::Float64=1/252, min_obs::Int=2)
+             dt::Float64=1/252, min_obs::Int=2,
+             residual_method::Symbol=:bootstrap)
 
     n_obs, n_assets = size(prices)
     @assert n_assets == length(tickers) "tickers length must match columns of prices"
@@ -43,7 +44,8 @@ function fit(::Type{PortfolioModel}, tickers::Vector{String},
         # fit SIM (internally fits market HMM)
         sim_model = fit(SingleIndexModel, asset_returns, market_returns;
                         market_prices=market_prices_col,
-                        rf=rf, N=N, ν=ν, dt=dt, min_obs=min_obs)
+                        rf=rf, N=N, ν=ν, dt=dt, min_obs=min_obs,
+                        residual_method=residual_method)
 
         # marginals for non-market assets (for individual validation)
         marginals = Dict{String,JumpHiddenMarkovModel}()
@@ -98,7 +100,7 @@ function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
         else
             market_tuned = dep.market_model
         end
-        dep = SingleIndexModel(dep.α, dep.β, dep.σ_ε, market_tuned)
+        dep = SingleIndexModel(dep.α, dep.β, dep.σ_ε, dep.residuals, dep.residual_method, market_tuned)
     end
 
     return PortfolioModel(portfolio.tickers, tuned_marginals, dep,

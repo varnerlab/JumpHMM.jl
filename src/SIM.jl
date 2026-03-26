@@ -10,7 +10,11 @@ function fit(::Type{SingleIndexModel}, returns::AbstractMatrix{Float64},
              market_returns::AbstractVector{Float64};
              market_prices::Union{AbstractVector{<:Real},Nothing}=nothing,
              rf::Float64=0.0, N::Int=100, ν::Float64=5.0,
-             dt::Float64=1/252, min_obs::Int=2)
+             dt::Float64=1/252, min_obs::Int=2,
+             residual_method::Symbol=:bootstrap)
+
+    residual_method in (:bootstrap, :gaussian) ||
+        throw(ArgumentError("residual_method must be :bootstrap or :gaussian, got :$residual_method"))
 
     n_obs, n_assets = size(returns)
     @assert length(market_returns) == n_obs "market_returns must match returns row count"
@@ -30,6 +34,7 @@ function fit(::Type{SingleIndexModel}, returns::AbstractMatrix{Float64},
     α = Vector{Float64}(undef, n_assets)
     β = Vector{Float64}(undef, n_assets)
     σ_ε = Vector{Float64}(undef, n_assets)
+    resid_matrix = Matrix{Float64}(undef, n_obs, n_assets)
 
     G_m = market_returns
     G_m_mean = mean(G_m)
@@ -43,11 +48,11 @@ function fit(::Type{SingleIndexModel}, returns::AbstractMatrix{Float64},
         G_i_mean = mean(G_i)
         β[i] = cov(G_i, G_m) / G_m_var
         α[i] = G_i_mean - β[i] * G_m_mean
-        residuals = G_i .- α[i] .- β[i] .* G_m
-        σ_ε[i] = std(residuals)
+        resid_matrix[:, i] = G_i .- α[i] .- β[i] .* G_m
+        σ_ε[i] = std(resid_matrix[:, i])
     end
 
-    return SingleIndexModel(α, β, σ_ε, market_model)
+    return SingleIndexModel(α, β, σ_ε, resid_matrix, residual_method, market_model)
 end
 
 """
@@ -62,11 +67,22 @@ function sample_dependence(sim::SingleIndexModel, n::Int)
     G_market = market_result.paths[1].observations
 
     n_assets = length(sim.α)
+    T_train = size(sim.residuals, 1)
     returns = Matrix{Float64}(undef, n, n_assets)
-    for i in 1:n_assets
-        for t in 1:n
-            returns[t, i] = sim.α[i] + sim.β[i] * G_market[t] +
-                            sim.σ_ε[i] * randn()
+
+    if sim.residual_method == :bootstrap
+        idx = rand(1:T_train, n)
+        for i in 1:n_assets
+            for t in 1:n
+                returns[t, i] = sim.α[i] + sim.β[i] * G_market[t] + sim.residuals[idx[t], i]
+            end
+        end
+    else  # :gaussian
+        for i in 1:n_assets
+            for t in 1:n
+                returns[t, i] = sim.α[i] + sim.β[i] * G_market[t] +
+                                sim.σ_ε[i] * randn()
+            end
         end
     end
 
