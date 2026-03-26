@@ -56,6 +56,7 @@ end
     forward_filter(model, observations) → Matrix{Float64}
 
 Forward algorithm: compute P(S_t = k | G_{1:t}). Returns (n_steps × N) matrix.
+Implemented in log-space with log-sum-exp normalization for numerical stability.
 """
 function forward_filter(model::JumpHiddenMarkovModel,
                         observations::AbstractVector{Float64})
@@ -65,29 +66,42 @@ function forward_filter(model::JumpHiddenMarkovModel,
 
     dists = [model.emissions[k].μ + model.emissions[k].σ * TDist(ν)
              for k in 1:N]
+    log_T = log.(model.transition)
 
     alpha = Matrix{Float64}(undef, T_steps, N)
+    log_alpha = Vector{Float64}(undef, N)
 
-    # initialization
+    # initialization (log-space)
     for k in 1:N
-        alpha[1, k] = model.stationary[k] * pdf(dists[k], observations[1])
+        lp = model.stationary[k] > 0.0 ? log(model.stationary[k]) : -Inf
+        log_alpha[k] = lp + logpdf(dists[k], observations[1])
     end
-    Z = sum(alpha[1, :])
-    alpha[1, :] ./= Z
+    # normalize to probabilities via log-sum-exp
+    m = maximum(log_alpha)
+    alpha[1, :] .= exp.(log_alpha .- m) ./ sum(exp.(log_alpha .- m))
 
     # recursion
+    log_alpha_new = Vector{Float64}(undef, N)
     for t in 2:T_steps
         for k in 1:N
-            pred = 0.0
+            # log-sum-exp: log(sum_j alpha[t-1,j] * T[j,k])
+            max_val = -Inf
             for j in 1:N
-                pred += alpha[t-1, j] * model.transition[j, k]
+                v = log_alpha[j] + log_T[j, k]
+                if v > max_val
+                    max_val = v
+                end
             end
-            alpha[t, k] = pred * pdf(dists[k], observations[t])
+            s = 0.0
+            for j in 1:N
+                s += exp(log_alpha[j] + log_T[j, k] - max_val)
+            end
+            log_alpha_new[k] = max_val + log(s) + logpdf(dists[k], observations[t])
         end
-        Z = sum(alpha[t, :])
-        if Z > 0.0
-            alpha[t, :] ./= Z
-        end
+        # normalize: store log-space for next iteration, probability-space in output
+        m = maximum(log_alpha_new)
+        log_alpha .= log_alpha_new
+        alpha[t, :] .= exp.(log_alpha_new .- m) ./ sum(exp.(log_alpha_new .- m))
     end
 
     return alpha
@@ -97,6 +111,7 @@ end
     log_likelihood(model, observations) → Float64
 
 Log-likelihood of an observation sequence under the model (forward algorithm).
+Implemented in log-space with log-sum-exp for numerical stability.
 """
 function log_likelihood(model::JumpHiddenMarkovModel,
                         observations::AbstractVector{Float64})
@@ -106,32 +121,45 @@ function log_likelihood(model::JumpHiddenMarkovModel,
 
     dists = [model.emissions[k].μ + model.emissions[k].σ * TDist(ν)
              for k in 1:N]
+    log_T = log.(model.transition)
 
-    alpha = Vector{Float64}(undef, N)
+    log_alpha = Vector{Float64}(undef, N)
     ll = 0.0
 
-    # initialization
+    # initialization (log-space)
     for k in 1:N
-        alpha[k] = model.stationary[k] * pdf(dists[k], observations[1])
+        lp = model.stationary[k] > 0.0 ? log(model.stationary[k]) : -Inf
+        log_alpha[k] = lp + logpdf(dists[k], observations[1])
     end
-    Z = sum(alpha)
-    ll += log(Z)
-    alpha ./= Z
+    # normalize and accumulate log-likelihood
+    m = maximum(log_alpha)
+    log_Z = m + log(sum(exp.(log_alpha .- m)))
+    ll += log_Z
+    log_alpha .-= log_Z
 
     # recursion
-    alpha_new = Vector{Float64}(undef, N)
+    log_alpha_new = Vector{Float64}(undef, N)
     for t in 2:T_steps
         for k in 1:N
-            pred = 0.0
+            # log-sum-exp: log(sum_j alpha[j] * T[j,k])
+            max_val = -Inf
             for j in 1:N
-                pred += alpha[j] * model.transition[j, k]
+                v = log_alpha[j] + log_T[j, k]
+                if v > max_val
+                    max_val = v
+                end
             end
-            alpha_new[k] = pred * pdf(dists[k], observations[t])
+            s = 0.0
+            for j in 1:N
+                s += exp(log_alpha[j] + log_T[j, k] - max_val)
+            end
+            log_alpha_new[k] = max_val + log(s) + logpdf(dists[k], observations[t])
         end
-        Z = sum(alpha_new)
-        ll += log(Z)
-        alpha_new ./= Z
-        alpha .= alpha_new
+        # normalize and accumulate
+        m = maximum(log_alpha_new)
+        log_Z = m + log(sum(exp.(log_alpha_new .- m)))
+        ll += log_Z
+        log_alpha .= log_alpha_new .- log_Z
     end
 
     return ll

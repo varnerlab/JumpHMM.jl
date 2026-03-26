@@ -35,10 +35,13 @@ function simulate(model::JumpHiddenMarkovModel, n_steps::Int;
         obs_out = Vector{Float64}(undef, n_steps)
         jumps_out = Vector{Bool}(undef, n_steps)
 
-        # pick starting state
+        # pick starting state and record it at t=1
         s = (start === :stationary) ? rand(π_cat) : start
+        states_out[1] = s
+        obs_out[1] = sample_emission(model.emissions[s])
+        jumps_out[1] = false
 
-        t = 1
+        t = 2
         while t ≤ n_steps
             if ϵ > 0.0 && rand() < ϵ
                 # jump event

@@ -59,18 +59,27 @@ function fit(::Type{PortfolioModel}, tickers::Vector{String},
 end
 
 """
-    tune(portfolio, prices; kwargs...) → PortfolioModel
+    tune(portfolio, prices; tickers_map=nothing, market_col=nothing, kwargs...) → PortfolioModel
 
 Tune jump parameters for each marginal model. Returns a new PortfolioModel.
+
+For `SingleIndexModel` portfolios, `market_col` specifies the column index of the market
+ticker in `prices` so the market model can be tuned. If `tickers_map` is not provided,
+it is derived from the `tickers` argument that was originally passed to `fit`.
+
+**Important**: `tickers_map` must map each ticker in `portfolio.tickers` to the correct
+column index in `prices`. For SIM portfolios where the market column was removed from
+`portfolio.tickers`, the caller should either provide an explicit `tickers_map` or pass
+a `prices` matrix whose columns match `portfolio.tickers` in order.
 """
 function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
               tickers_map::Union{Dict{String,Int},Nothing}=nothing,
+              market_col::Union{Int,Nothing}=nothing,
               kwargs...)
 
     # build ticker → column index mapping if not provided
     if tickers_map === nothing
         tickers_map = Dict{String,Int}()
-        # assume columns correspond to portfolio.tickers order
         for (j, ticker) in enumerate(portfolio.tickers)
             tickers_map[ticker] = j
         end
@@ -86,11 +95,11 @@ function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
     # tune market model if SIM
     dep = portfolio.dependence
     if dep isa SingleIndexModel
-        # tune the market model within the SIM
-        market_model = dep.market_model
-        # need market prices — use the first non-included column or reconstruct
-        # For now, reconstruct from the market model's parameters
-        market_tuned = market_model  # SIM market tuning handled separately
+        if market_col !== nothing
+            market_tuned = tune(dep.market_model, prices[:, market_col]; kwargs...)
+        else
+            market_tuned = dep.market_model
+        end
         dep = SingleIndexModel(dep.α, dep.β, dep.σ_ε, market_tuned)
     end
 
@@ -115,26 +124,41 @@ function simulate(portfolio::PortfolioModel, n_steps::Int;
     results = Dict{String,SimulationResult}()
 
     if dep isa Union{GaussianCopula,StudentTCopula,VineCopula}
-        # copula approach: simulate each marginal, correlate via copula
-        for path_idx in 1:n_paths
+        # copula approach: simulate state sequences from marginals,
+        # then use copula uniforms + per-state inverse CDF for correlated observations
+        for ticker in tickers
+            results[ticker] = SimulationResult(Vector{SimulationPath}())
+        end
+
+        for _ in 1:n_paths
             # sample correlated uniforms
             U = sample_dependence(dep, n_steps)  # n_steps × n_assets
 
             for (j, ticker) in enumerate(tickers)
                 model = portfolio.marginals[ticker]
-                if !haskey(results, ticker)
-                    results[ticker] = SimulationResult(Vector{SimulationPath}())
+
+                # simulate a single path to get the state sequence and jump flags
+                r = simulate(model, n_steps; n_paths=1)
+                path = r.paths[1]
+
+                # replace independent observations with copula-correlated ones:
+                # for each timestep, use U[t,j] as the quantile through the
+                # emission distribution of the current state
+                obs_out = Vector{Float64}(undef, n_steps)
+                for t in 1:n_steps
+                    em = model.emissions[path.states[t]]
+                    # inverse CDF of location-scale Student-t: μ + σ × quantile(TDist(ν), u)
+                    obs_out[t] = em.μ + em.σ * quantile(TDist(model.ν), U[t, j])
                 end
 
-                # simulate a single path from the marginal
-                r = simulate(model, n_steps; n_paths=1)
-                push!(results[ticker].paths, r.paths[1])
+                push!(results[ticker].paths,
+                      SimulationPath(path.states, obs_out, path.jumps))
             end
         end
 
     elseif dep isa SingleIndexModel
         # SIM approach: simulate market, then generate asset returns
-        for path_idx in 1:n_paths
+        for _ in 1:n_paths
             dep_returns = sample_dependence(dep, n_steps)  # n_steps × n_assets
 
             for (j, ticker) in enumerate(tickers)
@@ -156,9 +180,14 @@ function simulate(portfolio::PortfolioModel, n_steps::Int;
 end
 
 """
-    validate(portfolio, prices; kwargs...) → Dict{String, ValidationReport}
+    validate(portfolio, prices; tickers_map=nothing, kwargs...) → Dict{String, ValidationReport}
 
 Validate each marginal model against its empirical data.
+
+**Important**: `tickers_map` must map each ticker in `portfolio.tickers` to the correct
+column index in `prices`. For SIM portfolios where the market column was removed from
+`portfolio.tickers`, the caller should either provide an explicit `tickers_map` or pass
+a `prices` matrix whose columns match `portfolio.tickers` in order.
 """
 function validate(portfolio::PortfolioModel,
                   prices::AbstractMatrix{<:Real};
