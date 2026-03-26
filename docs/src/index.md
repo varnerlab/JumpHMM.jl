@@ -11,7 +11,7 @@ The model reproduces three canonical stylized facts of financial returns:
 
 ## Features
 - Single-asset pipeline: `fit` → `tune` → `simulate` → `validate` → `decode`
-- Three multi-asset dependence models: `GaussianCopula`, `StudentTCopula`, `SingleIndexModel`
+- Four multi-asset dependence models: `GaussianCopula`, `StudentTCopula`, `VineCopula`, `SingleIndexModel`
 - Immutable type system — all fitting/tuning operations return new instances
 - Self-contained — all finance helpers built in
 

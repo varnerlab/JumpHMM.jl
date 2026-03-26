@@ -21,9 +21,15 @@ U = sample_dependence(gc, 1000)  # (1000 × n_assets) uniform matrix
 ## Student-t Copula
 Adds a degrees-of-freedom parameter `ν` that controls tail dependence — the tendency for extreme co-movements. Lower `ν` means stronger tail dependence.
 
+The `ν` parameter is automatically selected via profile maximum likelihood over the candidates `[3, 4, 5, 6, 7, 8, 10, 15, 20, 30]`.
+
 ```julia
 tc = fit(StudentTCopula, returns_matrix)
+tc.ν  # selected degrees of freedom
 U = sample_dependence(tc, 1000)
 ```
+
+## Positive-Definiteness
+Both copula types automatically regularize the estimated correlation matrix to ensure positive-definiteness. This prevents `PosDefException` errors when sampling from nearly collinear assets.
 
 ## API

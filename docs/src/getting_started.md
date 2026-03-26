@@ -56,7 +56,7 @@ The model is defined by five components:
 1. **Laplace Partition**: Continuous observations are discretized into `N` states (default 100) using equal-probability quantile bins of a fitted Laplace distribution
 2. **Transition Matrix**: Estimated by direct frequency counting of observed state-to-state transitions (no Baum-Welch/EM)
 3. **Emissions**: Per-state location-scale Student-t distributions with `ν=5` degrees of freedom
-4. **Stationary Distribution**: Computed via matrix exponentiation `T^50`
+4. **Stationary Distribution**: Computed by solving the linear system `πT = π` with `sum(π) = 1`
 5. **Jump Mechanism**: With probability `ϵ` per step, the chain is forced into tail states for `Poisson(λ)` consecutive steps, producing volatility clustering
 
 The `fit` → `tune` two-step workflow separates the deterministic model fitting (fast) from the stochastic jump parameter optimization (expensive grid search).

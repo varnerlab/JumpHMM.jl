@@ -28,4 +28,8 @@ sim = fit(SingleIndexModel, asset_returns, market_returns;
 dep_returns = sample_dependence(sim, 252)
 ```
 
+The `market_prices` parameter is optional. If omitted, prices are reconstructed from returns using a dummy initial price `P₀ = 100`.
+
+**Note**: The market factor must have nonzero variance. Constant market returns will raise an `ArgumentError`.
+
 ## API

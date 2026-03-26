@@ -13,13 +13,13 @@ G_t = \frac{1}{\Delta t} \ln\left(\frac{P_t}{P_{t-1}}\right) - r_f
 Supports three input formats:
 
 ```julia
-# From a price vector
+# From a price vector → returns Vector{Float64} of length n-1
 G = excess_growth_rates(prices; rf=0.05, dt=1/252)
 
-# From a price matrix (n_obs × n_assets)
+# From a price matrix (n_obs × n_assets) → returns (n_obs-1 × n_assets) matrix
 G = excess_growth_rates(price_matrix; rf=0.05, dt=1/252)
 
-# From a Dict{String, DataFrame}
+# From a Dict{String, DataFrame} → returns (n_obs-1 × n_tickers) matrix
 G = excess_growth_rates(data, tickers; rf=0.05, price_col=:close)
 ```
 
