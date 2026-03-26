@@ -4,97 +4,97 @@
 
 ### Abstract Types
 ```@docs
-AbstractMarkovModel
-AbstractDependenceModel
-AbstractValidationResult
+JumpHMM.AbstractMarkovModel
+JumpHMM.AbstractDependenceModel
+JumpHMM.AbstractValidationResult
 ```
 
 ### Model Types
 ```@docs
-LaplacePartition
-StudentTEmission
-JumpParameters
-JumpHiddenMarkovModel
+JumpHMM.LaplacePartition
+JumpHMM.StudentTEmission
+JumpHMM.JumpParameters
+JumpHMM.JumpHiddenMarkovModel
 ```
 
 ### Simulation Types
 ```@docs
-SimulationPath
-SimulationResult
+JumpHMM.SimulationPath
+JumpHMM.SimulationResult
 ```
 
 ### Validation Types
 ```@docs
-PathTestResult
-ValidationReport
+JumpHMM.PathTestResult
+JumpHMM.ValidationReport
 ```
 
 ### Dependence Models
 ```@docs
-GaussianCopula
-StudentTCopula
-SingleIndexModel
+JumpHMM.GaussianCopula
+JumpHMM.StudentTCopula
+JumpHMM.SingleIndexModel
 ```
 
 ### Portfolio Types
 ```@docs
-PortfolioModel
-PortfolioSimulationResult
+JumpHMM.PortfolioModel
+JumpHMM.PortfolioSimulationResult
 ```
 
 ## Functions
 
 ### Fitting
 ```@docs
-fit(::Type{JumpHiddenMarkovModel}, ::AbstractVector{<:Real})
-fit(::Type{LaplacePartition}, ::AbstractVector{Float64})
-fit(::Type{GaussianCopula}, ::AbstractMatrix{Float64})
-fit(::Type{StudentTCopula}, ::AbstractMatrix{Float64})
-fit(::Type{SingleIndexModel}, ::AbstractMatrix{Float64}, ::AbstractVector{Float64})
-fit(::Type{PortfolioModel}, ::Vector{String}, ::AbstractMatrix{<:Real})
-assign_states
-estimate_transition
-stationary_distribution
-fit_emissions
-sample_emission
+JumpHMM.fit(::Type{JumpHiddenMarkovModel}, ::AbstractVector{<:Real})
+JumpHMM.fit(::Type{LaplacePartition}, ::AbstractVector{Float64})
+JumpHMM.fit(::Type{GaussianCopula}, ::AbstractMatrix{Float64})
+JumpHMM.fit(::Type{StudentTCopula}, ::AbstractMatrix{Float64})
+JumpHMM.fit(::Type{SingleIndexModel}, ::AbstractMatrix{Float64}, ::AbstractVector{Float64})
+JumpHMM.fit(::Type{PortfolioModel}, ::Vector{String}, ::AbstractMatrix{<:Real})
+JumpHMM.assign_states
+JumpHMM.estimate_transition
+JumpHMM.stationary_distribution
+JumpHMM.fit_emissions
+JumpHMM.sample_emission
 ```
 
 ### Tuning
 ```@docs
-tune(::JumpHiddenMarkovModel, ::AbstractVector{<:Real})
-tune(::PortfolioModel, ::AbstractMatrix{<:Real})
+JumpHMM.tune(::JumpHiddenMarkovModel, ::AbstractVector{<:Real})
+JumpHMM.tune(::PortfolioModel, ::AbstractMatrix{<:Real})
 ```
 
 ### Simulation
 ```@docs
-simulate(::JumpHiddenMarkovModel, ::Int)
-simulate(::PortfolioModel, ::Int)
+JumpHMM.simulate(::JumpHiddenMarkovModel, ::Int)
+JumpHMM.simulate(::PortfolioModel, ::Int)
 ```
 
 ### Decoding
 ```@docs
-decode
-forward_filter
-log_likelihood
+JumpHMM.decode
+JumpHMM.forward_filter
+JumpHMM.log_likelihood
 ```
 
 ### Validation
 ```@docs
-validate(::JumpHiddenMarkovModel, ::AbstractVector{<:Real})
-validate(::PortfolioModel, ::AbstractMatrix{<:Real})
+JumpHMM.validate(::JumpHiddenMarkovModel, ::AbstractVector{<:Real})
+JumpHMM.validate(::PortfolioModel, ::AbstractMatrix{<:Real})
 ```
 
 ### Dependence
 ```@docs
-sample_dependence(::GaussianCopula, ::Int)
-sample_dependence(::StudentTCopula, ::Int)
-sample_dependence(::SingleIndexModel, ::Int)
+JumpHMM.sample_dependence(::GaussianCopula, ::Int)
+JumpHMM.sample_dependence(::StudentTCopula, ::Int)
+JumpHMM.sample_dependence(::SingleIndexModel, ::Int)
 ```
 
 ### Finance Helpers
 ```@docs
-excess_growth_rates(::AbstractVector{<:Real})
-excess_growth_rates(::AbstractMatrix{<:Real})
-excess_growth_rates(::Dict{String, DataFrame}, ::Vector{String})
-prices_from_growth_rates
+JumpHMM.excess_growth_rates(::AbstractVector{<:Real})
+JumpHMM.excess_growth_rates(::AbstractMatrix{<:Real})
+JumpHMM.excess_growth_rates(::Dict{String, DataFrame}, ::Vector{String})
+JumpHMM.prices_from_growth_rates
 ```
