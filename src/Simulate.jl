@@ -8,6 +8,8 @@ function simulate(model::JumpHiddenMarkovModel, n_steps::Int;
                   start::Union{Int,Symbol}=:stationary,
                   seed::Union{Int,Nothing}=nothing)
 
+    n_steps >= 1 || throw(ArgumentError("n_steps must be ≥ 1, got $n_steps"))
+
     if seed !== nothing
         Random.seed!(seed)
     end

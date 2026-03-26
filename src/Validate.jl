@@ -13,6 +13,7 @@ function validate(model::JumpHiddenMarkovModel,
 
     G_emp = excess_growth_rates(prices; rf=rf, dt=model.dt)
     n_steps = length(G_emp)
+    acf_lags = min(acf_lags, n_steps - 1)
     lags = collect(1:acf_lags)
     acf_emp = autocor(abs.(G_emp), lags)
     κ_emp = kurtosis(G_emp)
@@ -76,6 +77,10 @@ function _hellinger(x::AbstractVector{Float64}, y::AbstractVector{Float64})
     # common bin edges
     lo = min(minimum(x), minimum(y))
     hi = max(maximum(x), maximum(y))
+    if lo == hi
+        # both samples are degenerate at the same value — identical distributions
+        return 0.0
+    end
     n_bins = max(30, round(Int, sqrt(max(length(x), length(y)))))
     edges = range(lo, hi, length=n_bins + 1)
 

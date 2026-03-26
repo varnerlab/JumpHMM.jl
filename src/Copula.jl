@@ -5,7 +5,7 @@ Fit a Gaussian copula from an (n_obs × n_assets) matrix of excess growth rates.
 """
 function fit(::Type{GaussianCopula}, returns::AbstractMatrix{Float64})
     U = _pit(returns)
-    Σ = cor(U)
+    Σ = _ensure_posdef(cor(U))
     return GaussianCopula(Σ)
 end
 
@@ -16,7 +16,7 @@ Fit a Student-t copula. Estimates correlation from PIT values and ν via profile
 """
 function fit(::Type{StudentTCopula}, returns::AbstractMatrix{Float64})
     U = _pit(returns)
-    Σ = cor(U)
+    Σ = _ensure_posdef(cor(U))
     d = size(returns, 2)
 
     # profile MLE over candidate ν values
@@ -60,6 +60,20 @@ function sample_dependence(tc::StudentTCopula, n::Int)
 end
 
 # --- Private helpers -------------------------------------------------------
+
+function _ensure_posdef(Σ::Matrix{Float64}; tol::Float64=1e-8)
+    Σs = Symmetric(Σ)
+    if isposdef(Σs)
+        return Matrix(Σs)
+    end
+    # nudge eigenvalues to be at least tol
+    F = eigen(Σs)
+    λ = max.(F.values, tol)
+    Σ_fixed = F.vectors * Diagonal(λ) * F.vectors'
+    # re-normalize to correlation matrix (unit diagonal)
+    D = Diagonal(1.0 ./ sqrt.(diag(Σ_fixed)))
+    return Matrix(Symmetric(D * Σ_fixed * D))
+end
 
 function _pit(data::AbstractMatrix{Float64})
     n, d = size(data)

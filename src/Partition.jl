@@ -5,6 +5,9 @@ Fit a Laplace distribution via MLE, then construct N equal-probability quantile 
 """
 function fit(::Type{LaplacePartition}, observations::AbstractVector{Float64};
              N::Int=100)
+    if length(observations) < 2 || all(x -> x == observations[1], observations)
+        throw(ArgumentError("Cannot fit LaplacePartition: observations must have nonzero variance (got a constant series)."))
+    end
     d = fit_mle(Laplace, observations)
     return LaplacePartition(params(d)..., N)
 end

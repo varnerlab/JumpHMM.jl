@@ -26,6 +26,7 @@ function tune(model::JumpHiddenMarkovModel, prices::AbstractVector{<:Real};
     if n_steps == 0
         n_steps = length(G_emp)
     end
+    acf_lags = min(acf_lags, min(length(G_emp), n_steps) - 1)
     lags = collect(1:acf_lags)
     acf_obs = autocor(abs.(G_emp), lags)
     κ_obs = kurtosis(G_emp)
