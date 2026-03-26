@@ -71,6 +71,12 @@ function tune(model::JumpHiddenMarkovModel, prices::AbstractVector{<:Real};
         end
     end
 
+    if !isfinite(best_J)
+        @warn "tune: no candidate (ϵ, λ) produced any simulated paths with jumps. " *
+              "Returning model with (ϵ=$(best_ϵ), λ=$(best_λ)) but this was not " *
+              "data-driven. Consider increasing n_paths, n_steps, or ϵ_range."
+    end
+
     best_jump = JumpParameters(best_ϵ, best_λ; p_neg=p_neg, N_tail=N_tail)
     return JumpHiddenMarkovModel(
         model.partition, model.transition, model.emissions,

@@ -5,6 +5,7 @@ Viterbi algorithm: find the most likely state sequence. Computed in log-space.
 """
 function decode(model::JumpHiddenMarkovModel,
                 observations::AbstractVector{Float64})
+    isempty(observations) && throw(ArgumentError("observations must be non-empty"))
     N = model.partition.N
     T_steps = length(observations)
     ν = model.ν
@@ -60,6 +61,7 @@ Implemented in log-space with log-sum-exp normalization for numerical stability.
 """
 function forward_filter(model::JumpHiddenMarkovModel,
                         observations::AbstractVector{Float64})
+    isempty(observations) && throw(ArgumentError("observations must be non-empty"))
     N = model.partition.N
     T_steps = length(observations)
     ν = model.ν
@@ -127,6 +129,7 @@ Implemented in log-space with log-sum-exp for numerical stability.
 """
 function log_likelihood(model::JumpHiddenMarkovModel,
                         observations::AbstractVector{Float64})
+    isempty(observations) && throw(ArgumentError("observations must be non-empty"))
     N = model.partition.N
     T_steps = length(observations)
     ν = model.ν

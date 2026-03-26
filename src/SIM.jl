@@ -34,6 +34,9 @@ function fit(::Type{SingleIndexModel}, returns::AbstractMatrix{Float64},
     G_m = market_returns
     G_m_mean = mean(G_m)
     G_m_var = var(G_m)
+    if G_m_var ≈ 0.0
+        throw(ArgumentError("Cannot fit SingleIndexModel: market returns have zero variance (constant market factor)."))
+    end
 
     for i in 1:n_assets
         G_i = returns[:, i]
