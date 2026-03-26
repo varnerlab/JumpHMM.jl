@@ -233,11 +233,18 @@ end
     PortfolioModel
 
 Multi-asset model: marginal Jump-HMMs coupled by a dependence model.
+
+The `tickers_map` field stores the original ticker → column index mapping from
+the price matrix used during `fit`. For `SingleIndexModel` portfolios this includes
+the market ticker (stored in `market_ticker`), even though it is excluded from
+`tickers` and `marginals`.
 """
 struct PortfolioModel
     tickers::Vector{String}
     marginals::Dict{String,JumpHiddenMarkovModel}
     dependence::AbstractDependenceModel
+    tickers_map::Dict{String,Int}
+    market_ticker::String
 end
 
 """

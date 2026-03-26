@@ -78,7 +78,13 @@ function forward_filter(model::JumpHiddenMarkovModel,
     end
     # normalize to probabilities via log-sum-exp
     m = maximum(log_alpha)
-    alpha[1, :] .= exp.(log_alpha .- m) ./ sum(exp.(log_alpha .- m))
+    if isfinite(m)
+        alpha[1, :] .= exp.(log_alpha .- m) ./ sum(exp.(log_alpha .- m))
+    else
+        # all states have zero likelihood — fall back to uniform
+        alpha[1, :] .= 1.0 / N
+        log_alpha .= -log(N)
+    end
 
     # recursion
     log_alpha_new = Vector{Float64}(undef, N)
@@ -100,8 +106,14 @@ function forward_filter(model::JumpHiddenMarkovModel,
         end
         # normalize: store log-space for next iteration, probability-space in output
         m = maximum(log_alpha_new)
-        log_alpha .= log_alpha_new
-        alpha[t, :] .= exp.(log_alpha_new .- m) ./ sum(exp.(log_alpha_new .- m))
+        if isfinite(m)
+            log_alpha .= log_alpha_new
+            alpha[t, :] .= exp.(log_alpha_new .- m) ./ sum(exp.(log_alpha_new .- m))
+        else
+            # all states have zero likelihood — fall back to uniform
+            alpha[t, :] .= 1.0 / N
+            log_alpha .= -log(N)
+        end
     end
 
     return alpha
@@ -133,9 +145,14 @@ function log_likelihood(model::JumpHiddenMarkovModel,
     end
     # normalize and accumulate log-likelihood
     m = maximum(log_alpha)
-    log_Z = m + log(sum(exp.(log_alpha .- m)))
-    ll += log_Z
-    log_alpha .-= log_Z
+    if isfinite(m)
+        log_Z = m + log(sum(exp.(log_alpha .- m)))
+        ll += log_Z
+        log_alpha .-= log_Z
+    else
+        # all states have zero likelihood — return -Inf immediately
+        return -Inf
+    end
 
     # recursion
     log_alpha_new = Vector{Float64}(undef, N)
@@ -157,9 +174,13 @@ function log_likelihood(model::JumpHiddenMarkovModel,
         end
         # normalize and accumulate
         m = maximum(log_alpha_new)
-        log_Z = m + log(sum(exp.(log_alpha_new .- m)))
-        ll += log_Z
-        log_alpha .= log_alpha_new .- log_Z
+        if isfinite(m)
+            log_Z = m + log(sum(exp.(log_alpha_new .- m)))
+            ll += log_Z
+            log_alpha .= log_alpha_new .- log_Z
+        else
+            return -Inf
+        end
     end
 
     return ll

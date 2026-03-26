@@ -25,7 +25,8 @@ function fit(::Type{PortfolioModel}, tickers::Vector{String},
 
         # fit copula
         dep = fit(dependence, returns)
-        return PortfolioModel(tickers, marginals, dep)
+        tickers_map = Dict{String,Int}(t => j for (j, t) in enumerate(tickers))
+        return PortfolioModel(tickers, marginals, dep, tickers_map, "")
 
     elseif dependence <: SingleIndexModel
         @assert !isempty(market) "market ticker required for SingleIndexModel"
@@ -52,7 +53,9 @@ function fit(::Type{PortfolioModel}, tickers::Vector{String},
                                     rf=rf, N=N, ν=ν, dt=dt, min_obs=min_obs)
         end
 
-        return PortfolioModel(asset_tickers, marginals, sim_model)
+        # store original column mapping including market
+        tickers_map = Dict{String,Int}(t => j for (j, t) in enumerate(tickers))
+        return PortfolioModel(asset_tickers, marginals, sim_model, tickers_map, market)
     else
         error("Unsupported dependence model: $dependence")
     end
@@ -63,47 +66,43 @@ end
 
 Tune jump parameters for each marginal model. Returns a new PortfolioModel.
 
-For `SingleIndexModel` portfolios, `market_col` specifies the column index of the market
-ticker in `prices` so the market model can be tuned. If `tickers_map` is not provided,
-it is derived from the `tickers` argument that was originally passed to `fit`.
-
-**Important**: `tickers_map` must map each ticker in `portfolio.tickers` to the correct
-column index in `prices`. For SIM portfolios where the market column was removed from
-`portfolio.tickers`, the caller should either provide an explicit `tickers_map` or pass
-a `prices` matrix whose columns match `portfolio.tickers` in order.
+By default, uses the column mapping stored in `portfolio.tickers_map` (set during `fit`).
+For `SingleIndexModel` portfolios, the market model is also tuned automatically using
+the stored market ticker mapping.
 """
 function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
               tickers_map::Union{Dict{String,Int},Nothing}=nothing,
               market_col::Union{Int,Nothing}=nothing,
               kwargs...)
 
-    # build ticker → column index mapping if not provided
-    if tickers_map === nothing
-        tickers_map = Dict{String,Int}()
-        for (j, ticker) in enumerate(portfolio.tickers)
-            tickers_map[ticker] = j
-        end
-    end
+    # use stored mapping by default
+    col_map = tickers_map !== nothing ? tickers_map : portfolio.tickers_map
 
     # tune each marginal
     tuned_marginals = Dict{String,JumpHiddenMarkovModel}()
     for (ticker, model) in portfolio.marginals
-        col = tickers_map[ticker]
+        col = col_map[ticker]
         tuned_marginals[ticker] = tune(model, prices[:, col]; kwargs...)
     end
 
     # tune market model if SIM
     dep = portfolio.dependence
     if dep isa SingleIndexModel
-        if market_col !== nothing
-            market_tuned = tune(dep.market_model, prices[:, market_col]; kwargs...)
+        # resolve market column: explicit arg > stored mapping
+        mcol = market_col
+        if mcol === nothing && !isempty(portfolio.market_ticker)
+            mcol = get(col_map, portfolio.market_ticker, nothing)
+        end
+        if mcol !== nothing
+            market_tuned = tune(dep.market_model, prices[:, mcol]; kwargs...)
         else
             market_tuned = dep.market_model
         end
         dep = SingleIndexModel(dep.α, dep.β, dep.σ_ε, market_tuned)
     end
 
-    return PortfolioModel(portfolio.tickers, tuned_marginals, dep)
+    return PortfolioModel(portfolio.tickers, tuned_marginals, dep,
+                          portfolio.tickers_map, portfolio.market_ticker)
 end
 
 """
@@ -124,8 +123,10 @@ function simulate(portfolio::PortfolioModel, n_steps::Int;
     results = Dict{String,SimulationResult}()
 
     if dep isa Union{GaussianCopula,StudentTCopula,VineCopula}
-        # copula approach: simulate state sequences from marginals,
-        # then use copula uniforms + per-state inverse CDF for correlated observations
+        # copula approach per SPECIFICATION.md §7.3:
+        # 1. Simulate each marginal independently (preserving state dynamics + jumps)
+        # 2. Use copula ranks to reorder observations, preserving cross-asset dependence
+        #    while maintaining each marginal's distributional properties
         for ticker in tickers
             results[ticker] = SimulationResult(Vector{SimulationPath}())
         end
@@ -137,19 +138,15 @@ function simulate(portfolio::PortfolioModel, n_steps::Int;
             for (j, ticker) in enumerate(tickers)
                 model = portfolio.marginals[ticker]
 
-                # simulate a single path to get the state sequence and jump flags
+                # simulate a single path to get state sequence, observations, and jump flags
                 r = simulate(model, n_steps; n_paths=1)
                 path = r.paths[1]
 
-                # replace independent observations with copula-correlated ones:
-                # for each timestep, use U[t,j] as the quantile through the
-                # emission distribution of the current state
-                obs_out = Vector{Float64}(undef, n_steps)
-                for t in 1:n_steps
-                    em = model.emissions[path.states[t]]
-                    # inverse CDF of location-scale Student-t: μ + σ × quantile(TDist(ν), u)
-                    obs_out[t] = em.μ + em.σ * quantile(TDist(model.ν), U[t, j])
-                end
+                # rank-reorder: sort the marginal observations, then place them
+                # according to the copula-induced ranks to inject cross-asset dependence
+                sorted_obs = sort(path.observations)
+                copula_ranks = ordinalrank(U[:, j])
+                obs_out = sorted_obs[copula_ranks]
 
                 push!(results[ticker].paths,
                       SimulationPath(path.states, obs_out, path.jumps))
@@ -184,26 +181,18 @@ end
 
 Validate each marginal model against its empirical data.
 
-**Important**: `tickers_map` must map each ticker in `portfolio.tickers` to the correct
-column index in `prices`. For SIM portfolios where the market column was removed from
-`portfolio.tickers`, the caller should either provide an explicit `tickers_map` or pass
-a `prices` matrix whose columns match `portfolio.tickers` in order.
+By default, uses the column mapping stored in `portfolio.tickers_map` (set during `fit`).
 """
 function validate(portfolio::PortfolioModel,
                   prices::AbstractMatrix{<:Real};
                   tickers_map::Union{Dict{String,Int},Nothing}=nothing,
                   kwargs...)
 
-    if tickers_map === nothing
-        tickers_map = Dict{String,Int}()
-        for (j, ticker) in enumerate(portfolio.tickers)
-            tickers_map[ticker] = j
-        end
-    end
+    col_map = tickers_map !== nothing ? tickers_map : portfolio.tickers_map
 
     reports = Dict{String,ValidationReport}()
     for (ticker, model) in portfolio.marginals
-        col = tickers_map[ticker]
+        col = col_map[ticker]
         reports[ticker] = validate(model, prices[:, col]; kwargs...)
     end
 
