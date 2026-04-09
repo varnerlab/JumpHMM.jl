@@ -59,7 +59,7 @@ portfolio = tune(portfolio, price_matrix)
 result = simulate(portfolio, 252; n_paths=1000)
 ```
 
-The hybrid approach extends the basic SIM with variance correction: per-ticker HMM marginals provide heavy-tailed idiosyncratic draws, which are then scaled to preserve either the marginal variance (most stocks) or the calibrated R² (index ETFs like SPY, QQQ). A copula (fitted on OLS residuals) injects cross-sectional dependence via rank-reordering. See the [SIM page](@ref) for the full derivation.
+The hybrid approach extends the basic SIM with variance correction: per-ticker HMM marginals provide heavy-tailed idiosyncratic draws, which are then scaled to preserve either the marginal variance (most stocks) or the calibrated R² (index ETFs like SPY, QQQ). A copula (fitted on OLS residuals) injects cross-sectional dependence via rank-reordering. See the [Single-Index Model](@ref) page for the full derivation.
 
 ## Comparing Approaches
 ```julia
