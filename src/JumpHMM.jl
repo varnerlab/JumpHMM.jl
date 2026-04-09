@@ -59,7 +59,7 @@ export LaplacePartition, StudentTEmission, JumpParameters
 export JumpHiddenMarkovModel
 export SimulationPath, SimulationResult
 export PathTestResult, ValidationReport
-export GaussianCopula, StudentTCopula, SingleIndexModel
+export GaussianCopula, StudentTCopula, SingleIndexModel, HybridSingleIndexModel
 export AbstractBivariateCopula, GaussianBiCopula, StudentTBiCopula
 export ClaytonBiCopula, GumbelBiCopula, FrankBiCopula
 export VineEdge, VineCopula

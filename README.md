@@ -54,6 +54,7 @@ Three interchangeable dependence models are available behind `AbstractDependence
 | `StudentTCopula` | Full n×n | Yes (via ν) | Realistic portfolios |
 | `GaussianCopula` | Full n×n | None | Simple baseline |
 | `SingleIndexModel` | Through 1 factor | Inherited from market | 100+ asset universes |
+| `HybridSingleIndexModel` | 1 factor + HMM marginals + copula | Yes (from marginals + copula) | Variance-preserving synthetic data |
 
 ```julia
 using JumpHMM
@@ -70,6 +71,10 @@ result = simulate(portfolio, 252; n_paths=1000)
 # Single-Index Model approach (for large universes)
 portfolio = fit(PortfolioModel, tickers, price_matrix;
     dependence=SingleIndexModel, market="SPY", rf=0.05)
+
+# Hybrid SIM approach (variance-corrected, preserves HMM marginals)
+portfolio = fit(PortfolioModel, tickers, price_matrix;
+    dependence=HybridSingleIndexModel, market="SPY", rf=0.05)
 ```
 
 The interface is identical after `fit` — `tune`, `simulate`, and `validate` work the same regardless of the dependence model.

@@ -58,6 +58,17 @@ function fit(::Type{PortfolioModel}, tickers::Vector{String},
         # store original column mapping including market
         tickers_map = Dict{String,Int}(t => j for (j, t) in enumerate(tickers))
         return PortfolioModel(asset_tickers, marginals, sim_model, tickers_map, market)
+
+    elseif dependence <: HybridSingleIndexModel
+        @assert !isempty(market) "market ticker required for HybridSingleIndexModel"
+
+        # fit end-to-end (market HMM, per-ticker marginals, OLS, copula)
+        hybrid = fit(HybridSingleIndexModel, tickers, prices, market;
+                     rf=rf, N=N, ν=ν, dt=dt, min_obs=min_obs)
+
+        # store original column mapping including market
+        tickers_map = Dict{String,Int}(t => j for (j, t) in enumerate(tickers))
+        return PortfolioModel(hybrid.tickers, hybrid.marginals, hybrid, tickers_map, market)
     else
         error("Unsupported dependence model: $dependence")
     end
@@ -87,7 +98,7 @@ function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
         tuned_marginals[ticker] = tune(model, prices[:, col]; kwargs...)
     end
 
-    # tune market model if SIM
+    # tune market model if SIM or HybridSIM
     dep = portfolio.dependence
     if dep isa SingleIndexModel
         # resolve market column: explicit arg > stored mapping
@@ -101,6 +112,28 @@ function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
             market_tuned = dep.market_model
         end
         dep = SingleIndexModel(dep.α, dep.β, dep.σ_ε, dep.residuals, dep.residual_method, market_tuned)
+
+    elseif dep isa HybridSingleIndexModel
+        # resolve market column
+        mcol = market_col
+        if mcol === nothing && !isempty(portfolio.market_ticker)
+            mcol = get(col_map, portfolio.market_ticker, nothing)
+        end
+        market_tuned = (mcol !== nothing) ?
+            tune(dep.market_model, prices[:, mcol]; kwargs...) : dep.market_model
+
+        # tune per-ticker marginals
+        tuned_hybrid_marginals = Dict{String,JumpHiddenMarkovModel}()
+        for (ticker, model) in dep.marginals
+            col = col_map[ticker]
+            tuned_hybrid_marginals[ticker] = tune(model, prices[:, col]; kwargs...)
+        end
+
+        dep = HybridSingleIndexModel(
+            dep.α, dep.β, dep.r², dep.σ_market,
+            tuned_hybrid_marginals, dep.copula, market_tuned, dep.tickers,
+            dep.r2_preserve_threshold, dep.idiosyncratic_floor
+        )
     end
 
     return PortfolioModel(portfolio.tickers, tuned_marginals, dep,
@@ -169,6 +202,25 @@ function simulate(portfolio::PortfolioModel, n_steps::Int;
                 # states/jumps not directly meaningful for SIM-generated paths
                 states = fill(0, n_steps)
                 jumps = fill(false, n_steps)
+                push!(results[ticker].paths,
+                      SimulationPath(states, obs, jumps))
+            end
+        end
+
+    elseif dep isa HybridSingleIndexModel
+        # Hybrid SIM: variance-corrected composition with copula reorder
+        for _ in 1:n_paths
+            dep_returns = sample_dependence(dep, n_steps)  # (n_steps-1) × n_assets
+            T_eff = size(dep_returns, 1)
+
+            for (j, ticker) in enumerate(dep.tickers)
+                if !haskey(results, ticker)
+                    results[ticker] = SimulationResult(Vector{SimulationPath}())
+                end
+
+                obs = dep_returns[:, j]
+                states = fill(0, T_eff)
+                jumps = fill(false, T_eff)
                 push!(results[ticker].paths,
                       SimulationPath(states, obs, jumps))
             end

@@ -230,6 +230,33 @@ struct SingleIndexModel <: AbstractDependenceModel
     market_model::JumpHiddenMarkovModel
 end
 
+"""
+    HybridSingleIndexModel <: AbstractDependenceModel
+
+Variance-corrected Single-Index Model with per-ticker HMM marginals and copula
+dependence. Combines:
+- SIM factor structure: `G_i = αᵢ + βᵢ × G_market + εᵢ`
+- Per-ticker HMM marginals for idiosyncratic draws (preserves tails, regimes)
+- Variance correction so `Var[G_i] ≈ Var[marginal_i]` (marginal-preserving branch)
+  or exact R² recovery (R²-preserving branch for high-R² ETFs)
+- β clipping with an idiosyncratic floor to prevent degenerate paths
+- Copula rank-reordering to preserve cross-sectional dependence
+
+See `sample_dependence` for the full construction recipe.
+"""
+struct HybridSingleIndexModel <: AbstractDependenceModel
+    α::Vector{Float64}                              # per-ticker intercepts (Jensen's alpha)
+    β::Vector{Float64}                              # per-ticker calibrated betas
+    r²::Vector{Float64}                             # per-ticker R² from OLS calibration
+    σ_market::Float64                               # market growth-rate std (annualized)
+    marginals::Dict{String,JumpHiddenMarkovModel}   # per-ticker HMM marginals
+    copula::AbstractDependenceModel                 # fitted on OLS residuals
+    market_model::JumpHiddenMarkovModel             # fitted market HMM
+    tickers::Vector{String}                         # ordered ticker list (indexes α, β, r²)
+    r2_preserve_threshold::Float64                  # R² cutoff for R²-preserving branch
+    idiosyncratic_floor::Float64                    # minimum idiosyncratic variance share (f)
+end
+
 # --- Portfolio Types --------------------------------------------------------
 """
     PortfolioModel

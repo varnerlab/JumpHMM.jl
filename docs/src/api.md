@@ -35,6 +35,7 @@ JumpHMM.GaussianCopula
 JumpHMM.StudentTCopula
 JumpHMM.VineCopula
 JumpHMM.SingleIndexModel
+JumpHMM.HybridSingleIndexModel
 ```
 
 ### Bivariate Copula Families
@@ -64,6 +65,7 @@ JumpHMM.fit(::Type{GaussianCopula}, ::AbstractMatrix{Float64})
 JumpHMM.fit(::Type{StudentTCopula}, ::AbstractMatrix{Float64})
 JumpHMM.fit(::Type{VineCopula}, ::AbstractMatrix{Float64})
 JumpHMM.fit(::Type{SingleIndexModel}, ::AbstractMatrix{Float64}, ::AbstractVector{Float64})
+JumpHMM.fit(::Type{HybridSingleIndexModel}, ::Vector{String}, ::AbstractMatrix{<:Real}, ::String)
 JumpHMM.fit(::Type{PortfolioModel}, ::Vector{String}, ::AbstractMatrix{<:Real})
 JumpHMM.assign_states
 JumpHMM.estimate_transition
@@ -103,6 +105,7 @@ JumpHMM.sample_dependence(::GaussianCopula, ::Int)
 JumpHMM.sample_dependence(::StudentTCopula, ::Int)
 JumpHMM.sample_dependence(::VineCopula, ::Int)
 JumpHMM.sample_dependence(::SingleIndexModel, ::Int)
+JumpHMM.sample_dependence(::HybridSingleIndexModel, ::Int)
 ```
 
 ### Finance Helpers

@@ -47,6 +47,20 @@ custom_map = Dict("AAPL" => 1, "MSFT" => 2)
 reports = validate(portfolio, new_prices; tickers_map=custom_map)
 ```
 
+## Hybrid Single-Index Model Approach
+```julia
+tickers = ["SPY", "AAPL", "MSFT", ...]  # include market ticker
+price_matrix = [...]
+
+portfolio = fit(PortfolioModel, tickers, price_matrix;
+    dependence=HybridSingleIndexModel, market="SPY", rf=0.05)
+
+portfolio = tune(portfolio, price_matrix)
+result = simulate(portfolio, 252; n_paths=1000)
+```
+
+The hybrid approach extends the basic SIM with variance correction: per-ticker HMM marginals provide heavy-tailed idiosyncratic draws, which are then scaled to preserve either the marginal variance (most stocks) or the calibrated R² (index ETFs like SPY, QQQ). A copula (fitted on OLS residuals) injects cross-sectional dependence via rank-reordering. See the [SIM page](@ref) for the full derivation.
+
 ## Comparing Approaches
 ```julia
 portfolio_copula = fit(PortfolioModel, tickers, prices;
