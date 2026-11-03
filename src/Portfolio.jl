@@ -253,12 +253,15 @@ function simulate(portfolio::PortfolioModel, n_steps::Int;
     end
 
     if dep isa SectorFactorModel
-        base = seed === nothing ? rand(1:1_000_000) : seed
+        # distinct per-path seeds, drawn from `seed` (or the system entropy source when `seed` is nothing),
+        # so runs with nearby seeds do not share paths
+        rng = seed === nothing ? Random.RandomDevice() : Xoshiro(seed)
+        path_seeds = StatsBase.sample(rng, 0:(10^8 - 1), n_paths; replace=false)
         for t in vcat(tickers, portfolio.market_ticker)
             results[t] = SimulationResult(Vector{SimulationPath}())
         end
         for p in 1:n_paths
-            d = sample_dependence(dep, n_steps; seed=base + p - 1)
+            d = sample_dependence(dep, n_steps; seed=path_seeds[p])
             for (j, t) in enumerate(dep.tickers)
                 push!(results[t].paths, SimulationPath(fill(0, n_steps), d.G[:, j], d.jumps))
             end

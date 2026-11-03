@@ -123,4 +123,25 @@ end
         @test_throws ArgumentError fit(PortfolioModel, tickers, prices; dependence=SectorFactorModel, market="MKT", N=10)
     end
 
+    @testset "final review fixes" begin
+        tickers, prices, sector = sector_universe()
+        pf = fit(PortfolioModel, tickers, prices; dependence=SectorFactorModel, market="MKT", sectors=sector,
+                 N=10, sector_options=(center_steps=20_000,))
+        dep = pf.dependence
+        # 1: runs with nearby seeds share no paths
+        r10 = simulate(pf, 50; n_paths=3, seed=10); r11 = simulate(pf, 50; n_paths=3, seed=11)
+        @test all(a.observations != b.observations for a in r10.results["A1"].paths for b in r11.results["A1"].paths)
+        @test length(unique([p.observations for p in r10.results["A1"].paths])) == 3
+        # 2: seed range guard (stream offsets assume 0 ≤ seed < 10^8)
+        @test_throws ArgumentError JumpHMM.sample_dependence(dep, 10; seed=10^8)
+        @test_throws ArgumentError JumpHMM.sample_dependence(dep, 10; seed=-1)
+        # 3: clipping is reported per name
+        d = JumpHMM.sample_dependence(dep, 100; seed=3)
+        @test d.n_clipped == zeros(Int, 6)
+        vals = [f === :β ? vcat(10.0, dep.β[2:end]) : getfield(dep, f) for f in fieldnames(SectorFactorModel)]
+        big = SectorFactorModel(vals...)
+        dbig = JumpHMM.sample_dependence(big, 100; seed=3)
+        @test dbig.n_clipped[1] == 100 && all(dbig.n_clipped[2:end] .== 0)
+    end
+
 end

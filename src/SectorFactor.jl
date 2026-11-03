@@ -254,16 +254,22 @@ function fit(::Type{SectorFactorModel}, tickers::Vector{String}, prices::Abstrac
 end
 
 """
-    sample_dependence(model::SectorFactorModel, n; seed) → (g_m, m_states, jumps, F, G, β_eff)
+    sample_dependence(model::SectorFactorModel, n; seed) → (g_m, m_states, jumps, F, G, β_eff, n_clipped)
 
 Draw one `n`-day synthetic path of the whole universe. `g_m`, `m_states`, `jumps` are the market draw
 (growth, states, jump-episode flags); `F` (n × sectors) holds one draw of each sector model; `G`
-(n × names) the composed name growth; `β_eff` (n × names) each name's per-day β after any clipping.
+(n × names) the composed name growth; `β_eff` (n × names) each name's per-day β after any clipping;
+`n_clipped` (one per name) the number of days whose loadings were shrunk (0 or `n`, see `compose_name`).
 Seeds: market `seed`; sector `s` `10^12 + 10^4·seed + s`; name `j` `2·10^12 + 10^4·seed + j`; β-drift
-shocks from `Xoshiro(3·10^12 + seed)`. The same `seed` reproduces the path exactly.
+shocks from `Xoshiro(3·10^12 + seed)`. The streams stay distinct for `0 ≤ seed < 10^8` and fewer than
+10^4 names and sectors; outside that range `ArgumentError` is thrown. The same `seed` reproduces the
+path exactly. Like `simulate(::JumpHiddenMarkovModel, ...)`, this reseeds the global RNG.
 """
 function sample_dependence(model::SectorFactorModel, n::Int; seed::Int)
     n >= 1 || throw(ArgumentError("n must be ≥ 1, got $(n)"))
+    0 <= seed < 10^8 || throw(ArgumentError("seed must satisfy 0 ≤ seed < 10^8 so the random streams stay distinct; got $(seed)"))
+    (length(model.tickers) < 10^4 && length(model.sectors) < 10^4) ||
+        throw(ArgumentError("the seed scheme supports fewer than 10^4 names and sectors"))
     mkt = simulate(model.market_model, n; n_paths=1, seed=seed).paths[1]
     S = length(model.sectors)
     N = length(model.tickers)
@@ -274,6 +280,7 @@ function sample_dependence(model::SectorFactorModel, n::Int; seed::Int)
     Z = randn(Xoshiro(3 * 10^12 + seed), n, N)
     G = zeros(Float64, n, N)
     β_eff = zeros(Float64, n, N)
+    n_clipped = zeros(Int, N)
     for j in 1:N
         ε = simulate(model.name_models[j], n; n_paths=1, seed=2 * 10^12 + 10^4 * seed + j).paths[1].observations
         β = model.β[j] .+ drift_path(view(Z, :, j), model.β_halflife, model.β_scale[j])
@@ -285,6 +292,8 @@ function sample_dependence(model::SectorFactorModel, n::Int; seed::Int)
                            floor=model.floor, r2_threshold=model.r2_threshold)
         G[:, j] = out.g
         β_eff[:, j] = out.β_eff
+        n_clipped[j] = out.n_clipped
     end
-    return (g_m=mkt.observations, m_states=mkt.states, jumps=mkt.jumps, F=F, G=G, β_eff=β_eff)
+    return (g_m=mkt.observations, m_states=mkt.states, jumps=mkt.jumps, F=F, G=G, β_eff=β_eff,
+            n_clipped=n_clipped)
 end
