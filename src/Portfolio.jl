@@ -9,7 +9,9 @@ function fit(::Type{PortfolioModel}, tickers::Vector{String},
              market::String="",
              rf::Float64=0.0, N::Int=100, ν::Float64=5.0,
              dt::Float64=1/252, min_obs::Int=2,
-             residual_method::Symbol=:bootstrap)
+             residual_method::Symbol=:bootstrap,
+             sectors::Vector{String}=String[],
+             sector_options::NamedTuple=NamedTuple())
 
     n_obs, n_assets = size(prices)
     @assert n_assets == length(tickers) "tickers length must match columns of prices"
@@ -69,6 +71,14 @@ function fit(::Type{PortfolioModel}, tickers::Vector{String},
         # store original column mapping including market
         tickers_map = Dict{String,Int}(t => j for (j, t) in enumerate(tickers))
         return PortfolioModel(hybrid.tickers, hybrid.marginals, hybrid, tickers_map, market)
+
+    elseif dependence <: SectorFactorModel
+        isempty(market) && throw(ArgumentError("market ticker required for SectorFactorModel"))
+        isempty(sectors) && throw(ArgumentError("sectors (one label per non-market ticker) required for SectorFactorModel"))
+        model, marginals = fit(SectorFactorModel, tickers, prices, market, sectors;
+                               rf=rf, N=N, ν=ν, dt=dt, min_obs=min_obs, sector_options...)
+        tickers_map = Dict{String,Int}(t => j for (j, t) in enumerate(tickers))
+        return PortfolioModel(model.tickers, marginals, model, tickers_map, market)
     else
         error("Unsupported dependence model: $dependence")
     end
@@ -134,6 +144,21 @@ function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
             tuned_hybrid_marginals, dep.copula, market_tuned, dep.tickers,
             dep.r2_preserve_threshold, dep.idiosyncratic_floor
         )
+    end
+
+    if dep isa SectorFactorModel
+        mcol = market_col
+        if mcol === nothing && !isempty(portfolio.market_ticker)
+            mcol = get(col_map, portfolio.market_ticker, nothing)
+        end
+        market_tuned = (mcol !== nothing) ? tune(dep.market_model, prices[:, mcol]; kwargs...) : dep.market_model
+        sectors_tuned = [tune(dep.sector_models[s], dep.sector_levels[:, s]; kwargs...)
+                         for s in eachindex(dep.sector_models)]
+        names_tuned = [tuned_marginals[t] for t in dep.tickers]
+        dep = SectorFactorModel(dep.tickers, dep.sector, dep.sectors, dep.sector_index, dep.α, dep.β, dep.δ,
+                                dep.r², dep.σ²_m, dep.σ²_s, dep.σ²_gen, dep.ε_center, dep.β_halflife,
+                                dep.β_scale, dep.floor, dep.r2_threshold, market_tuned, sectors_tuned,
+                                names_tuned, dep.sector_levels)
     end
 
     return PortfolioModel(portfolio.tickers, tuned_marginals, dep,
@@ -224,6 +249,20 @@ function simulate(portfolio::PortfolioModel, n_steps::Int;
                 push!(results[ticker].paths,
                       SimulationPath(states, obs, jumps))
             end
+        end
+    end
+
+    if dep isa SectorFactorModel
+        base = seed === nothing ? rand(1:1_000_000) : seed
+        for t in vcat(tickers, portfolio.market_ticker)
+            results[t] = SimulationResult(Vector{SimulationPath}())
+        end
+        for p in 1:n_paths
+            d = sample_dependence(dep, n_steps; seed=base + p - 1)
+            for (j, t) in enumerate(dep.tickers)
+                push!(results[t].paths, SimulationPath(fill(0, n_steps), d.G[:, j], d.jumps))
+            end
+            push!(results[portfolio.market_ticker].paths, SimulationPath(d.m_states, d.g_m, d.jumps))
         end
     end
 

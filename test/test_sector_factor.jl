@@ -92,4 +92,35 @@ end
         @test err isa ArgumentError && occursin("S2", err.msg)
     end
 
+    @testset "PortfolioModel with SectorFactorModel" begin
+        tickers, prices, sector = sector_universe()
+        opts = (center_steps=20_000,)
+        pf = fit(PortfolioModel, tickers, prices; dependence=SectorFactorModel, market="MKT", sectors=sector,
+                 N=10, sector_options=opts)
+        @test pf.dependence isa SectorFactorModel && pf.market_ticker == "MKT"
+        # review focus 4: same seed, same paths; market path returned; different seed, different paths
+        r1 = simulate(pf, 250; n_paths=3, seed=5); r2 = simulate(pf, 250; n_paths=3, seed=5)
+        @test r1.results["A1"].paths[2].observations == r2.results["A1"].paths[2].observations
+        @test haskey(r1.results, "MKT") && length(r1.results["MKT"].paths) == 3
+        @test r1.results["A1"].paths[1].observations != simulate(pf, 250; n_paths=1, seed=6).results["A1"].paths[1].observations
+        # same-day dependence: within-sector correlation above cross-sector correlation on a long path
+        d = JumpHMM.sample_dependence(pf.dependence, 20_000; seed=9)
+        C = cor(d.G)
+        @test mean([C[1, 2], C[1, 3], C[2, 3]]) > mean([C[i, j] for i in 1:3 for j in 4:6]) + 0.05
+        # variance target on a long path (fixed β, unclipped names)
+        @test all(isapprox.(vec(var(d.G; dims=1)), pf.dependence.σ²_gen; rtol=0.15))
+        # a drifting β changes the composed β path day by day
+        pd = fit(PortfolioModel, tickers, prices; dependence=SectorFactorModel, market="MKT", sectors=sector,
+                 N=10, sector_options=(center_steps=20_000, β_scale=fill(0.3, 6)))
+        dd = JumpHMM.sample_dependence(pd.dependence, 500; seed=9)
+        @test std(dd.β_eff[:, 1]) > 0 && length(unique(d.β_eff[:, 1])) == 1
+        # review focus 5: tune touches market, sectors, names
+        pt = tune(pf, prices; ϵ_range=range(1e-4, 1e-2, length=2), λ_range=range(10.0, 20.0, length=2), n_paths=4)
+        @test pt.dependence isa SectorFactorModel && length(pt.dependence.sector_models) == 2
+        @test pt.dependence.market_model.jump.ϵ > 0
+        @test all(m.jump.ϵ > 0 for m in pt.dependence.sector_models)
+        @test all(pt.marginals[t].jump.ϵ > 0 for t in pt.tickers)
+        @test_throws ArgumentError fit(PortfolioModel, tickers, prices; dependence=SectorFactorModel, market="MKT", N=10)
+    end
+
 end

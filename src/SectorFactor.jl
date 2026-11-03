@@ -252,3 +252,39 @@ function fit(::Type{SectorFactorModel}, tickers::Vector{String}, prices::Abstrac
     marginals = Dict{String,JumpHiddenMarkovModel}(names[i] => name_models[i] for i in eachindex(names))
     return (model, marginals)
 end
+
+"""
+    sample_dependence(model::SectorFactorModel, n; seed) → (g_m, m_states, jumps, F, G, β_eff)
+
+Draw one `n`-day synthetic path of the whole universe. `g_m`, `m_states`, `jumps` are the market draw
+(growth, states, jump-episode flags); `F` (n × sectors) holds one draw of each sector model; `G`
+(n × names) the composed name growth; `β_eff` (n × names) each name's per-day β after any clipping.
+Seeds: market `seed`; sector `s` `10^12 + 10^4·seed + s`; name `j` `2·10^12 + 10^4·seed + j`; β-drift
+shocks from `Xoshiro(3·10^12 + seed)`. The same `seed` reproduces the path exactly.
+"""
+function sample_dependence(model::SectorFactorModel, n::Int; seed::Int)
+    n >= 1 || throw(ArgumentError("n must be ≥ 1, got $(n)"))
+    mkt = simulate(model.market_model, n; n_paths=1, seed=seed).paths[1]
+    S = length(model.sectors)
+    N = length(model.tickers)
+    F = zeros(Float64, n, S)
+    for s in 1:S
+        F[:, s] = simulate(model.sector_models[s], n; n_paths=1, seed=10^12 + 10^4 * seed + s).paths[1].observations
+    end
+    Z = randn(Xoshiro(3 * 10^12 + seed), n, N)
+    G = zeros(Float64, n, N)
+    β_eff = zeros(Float64, n, N)
+    for j in 1:N
+        ε = simulate(model.name_models[j], n; n_paths=1, seed=2 * 10^12 + 10^4 * seed + j).paths[1].observations
+        β = model.β[j] .+ drift_path(view(Z, :, j), model.β_halflife, model.β_scale[j])
+        s = model.sector_index[j]
+        out = compose_name(fill(model.α[j], n), β, model.δ[j], mkt.observations, view(F, :, s), ε,
+                           model.σ²_m, model.σ²_s[s], model.σ²_gen[j], model.r²[j];
+                           ε_center=model.ε_center[j],
+                           β²_mean=model.β[j]^2 + drift_variance(model.β_halflife, model.β_scale[j]),
+                           floor=model.floor, r2_threshold=model.r2_threshold)
+        G[:, j] = out.g
+        β_eff[:, j] = out.β_eff
+    end
+    return (g_m=mkt.observations, m_states=mkt.states, jumps=mkt.jumps, F=F, G=G, β_eff=β_eff)
+end
