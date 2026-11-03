@@ -61,6 +61,7 @@ export JumpHiddenMarkovModel
 export SimulationPath, SimulationResult
 export PathTestResult, ValidationReport
 export GaussianCopula, StudentTCopula, SingleIndexModel, HybridSingleIndexModel
+export SectorFactorModel
 export AbstractBivariateCopula, GaussianBiCopula, StudentTBiCopula
 export ClaytonBiCopula, GumbelBiCopula, FrankBiCopula
 export VineEdge, VineCopula

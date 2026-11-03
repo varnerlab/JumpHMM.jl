@@ -257,6 +257,39 @@ struct HybridSingleIndexModel <: AbstractDependenceModel
     idiosyncratic_floor::Float64                    # minimum idiosyncratic variance share (f)
 end
 
+"""
+    SectorFactorModel <: AbstractDependenceModel
+
+Multi-asset composition with one market model, one model per sector, and one model per name:
+    g_i(t) = α_i + β_i(t)·g_m(t) + δ_i·f_s(t) + s_i·ε̃_i(t)
+Names are linked only through the shared market draw `g_m` and sector draw `f_s` on the same day
+(no copula). α and β come from the single-index fit; β is fixed unless `β_scale` is nonzero, in which
+case it drifts as an exponential moving average of normal shocks with half-life `β_halflife`.
+See `fit(SectorFactorModel, ...)` and `sample_dependence(::SectorFactorModel, n; seed)`.
+"""
+struct SectorFactorModel <: AbstractDependenceModel
+    tickers::Vector{String}                       # names, market excluded, in fit order
+    sector::Vector{String}                        # one label per name
+    sectors::Vector{String}                       # sorted unique labels
+    sector_index::Vector{Int}                     # position of each name's sector in `sectors`
+    α::Vector{Float64}                            # intercepts used (after the optional pull), yr⁻¹
+    β::Vector{Float64}                            # single-index β̂
+    δ::Vector{Float64}                            # sector loadings
+    r²::Vector{Float64}                           # real R² of the single-index fit
+    σ²_m::Float64                                 # variance of the market growth, yr⁻²
+    σ²_s::Vector{Float64}                         # variance of each sector factor, yr⁻²
+    σ²_gen::Vector{Float64}                       # variance of each name's growth, yr⁻²
+    ε_center::Vector{Float64}                     # long-run mean of each name model, yr⁻¹
+    β_halflife::Float64                           # trading days
+    β_scale::Vector{Float64}                      # per-name drift scale; zeros = fixed β
+    floor::Float64                                # smallest own-noise share of a name's variance
+    r2_threshold::Float64                         # R² at or above which a name keeps its real R²
+    market_model::JumpHiddenMarkovModel
+    sector_models::Vector{JumpHiddenMarkovModel}  # one per `sectors`
+    name_models::Vector{JumpHiddenMarkovModel}    # one per `tickers`
+    sector_levels::Matrix{Float64}                # compounded sector-factor series (price-like), for tune
+end
+
 # --- Portfolio Types --------------------------------------------------------
 """
     PortfolioModel

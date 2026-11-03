@@ -165,3 +165,90 @@ function compose_name(α::AbstractVector, β::AbstractVector, δ::Real, g_m::Abs
     g = α .+ β_eff .* g_m .+ (c * δ) .* f .+ sqrt(s²) .* (ε .- ε_center)
     return (g=collect(Float64, g), β_eff=collect(Float64, β_eff), n_clipped=n_clipped)
 end
+
+"""
+    fit(::Type{SectorFactorModel}, tickers, prices, market, sector; kwargs...) → (model, marginals)
+
+Fit a `SectorFactorModel`. `tickers` and the columns of `prices` include the market ticker `market`;
+`sector` holds one label per non-market ticker, in the order those tickers appear in `tickers`.
+Every sector needs at least two names.
+
+Steps: growth rates `G = excess_growth_rates(prices; rf, dt)`; single-index OLS of each name on the
+market → `α̂`, `β̂`, `r²`, residuals `E`; `sector_factors` and `sector_loadings` of `E`; intercepts
+`α = ᾱ + intercept_pull·(α̂ − ᾱ)`; a Jump-HMM for the market (its prices), for each name (its prices),
+and for each sector (the compounded sector factor, `100·exp(cumsum(F·dt))`, fit with `rf = 0`).
+Variance targets are the real variances. `ε_center[i]` is the mean of one `center_steps`-day draw of
+name model `i` seeded with `center_seed + i`.
+
+Keywords: `rf=0.0`, `N=100`, `ν=5.0`, `dt=1/252`, `min_obs=2` (as for `JumpHiddenMarkovModel`);
+`intercept_pull=1.0` (1 keeps `α̂`, 0 sets every α to the mean); `β_halflife=126.0` (trading days);
+`β_scale=nothing` (zeros: fixed β); `floor=0.10`; `r2_threshold=0.80`; `center_steps=1_000_000`;
+`center_seed=4_000_000`.
+
+Returns the model and a `Dict` of the name models keyed by ticker.
+"""
+function fit(::Type{SectorFactorModel}, tickers::Vector{String}, prices::AbstractMatrix{<:Real},
+             market::String, sector::Vector{String};
+             rf::Float64=0.0, N::Int=100, ν::Float64=5.0, dt::Float64=1/252, min_obs::Int=2,
+             intercept_pull::Float64=1.0, β_halflife::Float64=126.0,
+             β_scale::Union{Nothing,Vector{Float64}}=nothing,
+             floor::Float64=0.10, r2_threshold::Float64=0.80,
+             center_steps::Int=1_000_000, center_seed::Int=4_000_000)
+
+    size(prices, 2) == length(tickers) ||
+        throw(ArgumentError("tickers length $(length(tickers)) must match columns of prices $(size(prices, 2))"))
+    m = findfirst(==(market), tickers)
+    m === nothing && throw(ArgumentError("market ticker '$(market)' not found in tickers"))
+    names_idx = [j for j in eachindex(tickers) if j != m]
+    names = tickers[names_idx]
+    length(sector) == length(names) ||
+        throw(ArgumentError("sector has $(length(sector)) labels but there are $(length(names)) non-market tickers"))
+
+    # growth rates and the single-index fit
+    G_all = excess_growth_rates(prices; rf=rf, dt=dt)
+    g_m = G_all[:, m]
+    G = G_all[:, names_idx]
+    X = hcat(ones(length(g_m)), g_m)
+    α̂ = zeros(length(names)); β̂ = zeros(length(names)); r² = zeros(length(names))
+    E = similar(G)
+    for i in eachindex(names)
+        coef = X \ G[:, i]
+        α̂[i], β̂[i] = coef[1], coef[2]
+        E[:, i] = G[:, i] .- X * coef
+        r²[i] = 1 - var(E[:, i]) / var(G[:, i])
+    end
+
+    # sector factors and loadings (throws for one-name sectors or non-positive covariance)
+    sf = sector_factors(E, sector)
+    δ = sector_loadings(E, sector)
+    sector_index = [findfirst(==(s), sf.sectors) for s in sector]
+
+    # intercepts, optionally pulled toward the universe mean
+    ᾱ = mean(α̂)
+    α = ᾱ .+ intercept_pull .* (α̂ .- ᾱ)
+
+    # Jump-HMMs: market, names, sectors
+    market_model = fit(JumpHiddenMarkovModel, prices[:, m]; rf=rf, N=N, ν=ν, dt=dt, min_obs=min_obs)
+    name_models = [fit(JumpHiddenMarkovModel, prices[:, j]; rf=rf, N=N, ν=ν, dt=dt, min_obs=min_obs)
+                   for j in names_idx]
+    sector_levels = 100.0 .* exp.(vcat(zeros(1, size(sf.F, 2)), cumsum(sf.F .* dt; dims=1)))
+    sector_models = [fit(JumpHiddenMarkovModel, sector_levels[:, s]; rf=0.0, N=N, ν=ν, dt=dt, min_obs=min_obs)
+                     for s in eachindex(sf.sectors)]
+
+    # variance targets and the long-run mean of each name model
+    σ²_m = var(g_m)
+    σ²_s = vec(var(sf.F; dims=1))
+    σ²_gen = vec(var(G; dims=1))
+    ε_center = [mean(simulate(name_models[i], center_steps; n_paths=1, seed=center_seed + i).paths[1].observations)
+                for i in eachindex(names)]
+
+    scale = β_scale === nothing ? zeros(length(names)) : β_scale
+    length(scale) == length(names) ||
+        throw(ArgumentError("β_scale has $(length(scale)) entries but there are $(length(names)) names"))
+
+    model = SectorFactorModel(names, sector, sf.sectors, sector_index, α, β̂, δ, r², σ²_m, σ²_s, σ²_gen,
+                              ε_center, β_halflife, scale, floor, r2_threshold, market_model,
+                              sector_models, name_models, sector_levels)
+    marginals = Dict{String,JumpHiddenMarkovModel}(names[i] => name_models[i] for i in eachindex(names))
+    return (model, marginals)
+end

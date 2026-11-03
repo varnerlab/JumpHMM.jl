@@ -1,3 +1,25 @@
+# synthetic universe for SectorFactorModel tests: market MKT, sectors S1 (A1..A3) and S2 (B1..B3)
+function sector_universe(; T::Int=3000, seed::Int=3, flip_S2::Bool=false)
+    rng = MersenneTwister(seed); dt = 1/252
+    g_m = 0.08 .+ 2.8 .* randn(rng, T)                 # annualized market growth
+    f = 1.0 .* randn(rng, T, 2)                         # sector factors
+    β = [0.8, 1.0, 1.2, 0.9, 1.1, 1.3]; δ = [0.8, 1.0, 1.2, 0.9, 1.1, 1.0]
+    sector = ["S1", "S1", "S1", "S2", "S2", "S2"]
+    G = zeros(T, 6)
+    for i in 1:6
+        s = sector[i] == "S1" ? 1 : 2
+        G[:, i] = 0.02 .+ β[i] .* g_m .+ δ[i] .* f[:, s] .+ 2.0 .* randn(rng, T)
+    end
+    if flip_S2                                          # S2 residuals: B2 = −B1, B3 independent
+        u = 2.0 .* randn(rng, T)
+        G[:, 4] = 0.02 .+ β[4] .* g_m .+ u
+        G[:, 5] = 0.02 .+ β[5] .* g_m .- u
+        G[:, 6] = 0.02 .+ β[6] .* g_m .+ 2.0 .* randn(rng, T)
+    end
+    prices = 100.0 .* exp.(vcat(zeros(1, 7), cumsum(hcat(g_m, G) .* dt; dims=1)))
+    return (["MKT", "A1", "A2", "A3", "B1", "B2", "B3"], prices, sector)
+end
+
 @testset "SectorFactorModel" begin
 
     @testset "drift primitives" begin
@@ -45,6 +67,29 @@
         r2 = JumpHMM.compose_name(α, β, 0.5, g_m, f, ε, 1.0, 1.0, 4.0, 0.9; ε_center=0.0, β²_mean=1.44)
         @test r2.g ≈ 0.1 .+ 1.2 .* g_m .+ 0.5 .* f .+ sqrt((1.44 + 0.25) * (1 - 0.9) / 0.9 / 4.0) .* ε
         @test_throws ArgumentError JumpHMM.compose_name(α, β, 0.5, g_m, f[1:3], ε, 1.0, 1.0, 4.0, 0.3; ε_center=0.0, β²_mean=1.44)
+    end
+
+    @testset "fit SectorFactorModel" begin
+        tickers, prices, sector = sector_universe()
+        model, marginals = fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, center_steps=20_000)
+        @test model.tickers == tickers[2:end] && model.sectors == ["S1", "S2"]
+        @test all(isapprox.(model.β, [0.8, 1.0, 1.2, 0.9, 1.1, 1.3]; atol=0.1))
+        @test model.β_scale == zeros(6) && sort(collect(keys(marginals))) == sort(model.tickers)
+        @test length(model.sector_models) == 2 && size(model.sector_levels, 2) == 2
+        @test length(model.name_models) == 6
+        # intercept pull 0 sets every α to the universe mean
+        m0, _ = fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, center_steps=20_000, intercept_pull=0.0)
+        @test all(m0.α .≈ mean(m0.α))
+        # review focus 1: a sector with one name
+        @test_throws ArgumentError fit(SectorFactorModel, tickers[1:5], prices[:, 1:5], "MKT", ["S1", "S1", "S1", "S2"]; N=10)
+        # review focus 2: non-positive mean pairwise residual covariance names the sector
+        tf, pf, sf = sector_universe(; flip_S2=true)
+        err = try
+            fit(SectorFactorModel, tf, pf, "MKT", sf; N=10, center_steps=20_000); nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError && occursin("S2", err.msg)
     end
 
 end
