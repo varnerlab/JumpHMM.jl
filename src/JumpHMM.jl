@@ -24,6 +24,7 @@ include("Validate.jl")
 include("Copula.jl")
 include("Vine.jl")
 include("SIM.jl")
+include("SectorFactor.jl")
 include("Portfolio.jl")
 
 # --- Top-level fit orchestrator --------------------------------------------
