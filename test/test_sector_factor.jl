@@ -29,4 +29,22 @@
         end
     end
 
+    @testset "compose_name" begin
+        T = 4; α = fill(0.1, T); β = fill(1.2, T)
+        g_m = [1.0, -2.0, 0.5, 0.0]; f = [0.3, 0.0, -0.1, 0.2]; ε = [0.5, 0.5, 1.5, -0.5]
+        out = JumpHMM.compose_name(α, β, 0.5, g_m, f, ε, 1.0, 1.0, 4.0, 0.3; ε_center=0.5, β²_mean=1.44)
+        s² = 1 - (1.44 + 0.25) / 4.0
+        @test out.g ≈ 0.1 .+ 1.2 .* g_m .+ 0.5 .* f .+ sqrt(s²) .* (ε .- 0.5)
+        @test out.n_clipped == 0 && out.β_eff == β
+        # factor share above 1 - floor: loadings shrink, own scale = floor
+        hi = JumpHMM.compose_name(α, fill(3.0, T), 0.5, g_m, f, ε, 1.0, 1.0, 4.0, 0.3; ε_center=0.0, β²_mean=9.0)
+        c = sqrt(0.9 / ((9.0 + 0.25) / 4.0))
+        @test hi.n_clipped == T && hi.β_eff ≈ fill(3.0c, T)
+        @test hi.g ≈ 0.1 .+ 3.0c .* g_m .+ 0.5c .* f .+ sqrt(0.10) .* ε
+        # high real R²: keep the real R² (own-noise share from v̄(1 − r²)/r²)
+        r2 = JumpHMM.compose_name(α, β, 0.5, g_m, f, ε, 1.0, 1.0, 4.0, 0.9; ε_center=0.0, β²_mean=1.44)
+        @test r2.g ≈ 0.1 .+ 1.2 .* g_m .+ 0.5 .* f .+ sqrt((1.44 + 0.25) * (1 - 0.9) / 0.9 / 4.0) .* ε
+        @test_throws ArgumentError JumpHMM.compose_name(α, β, 0.5, g_m, f[1:3], ε, 1.0, 1.0, 4.0, 0.3; ε_center=0.0, β²_mean=1.44)
+    end
+
 end

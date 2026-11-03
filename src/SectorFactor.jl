@@ -121,3 +121,47 @@ function sector_loadings(E::AbstractMatrix, sector::Vector{String})::Vector{Floa
     end
     return δ
 end
+
+"""
+    compose_name(α, β, δ, g_m, f, ε, σ²_m, σ²_s, σ²_gen, r²; ε_center, β²_mean,
+                 floor=0.10, r2_threshold=0.80) → (g, β_eff, n_clipped)
+
+Compose one name's daily growth `g[t] = α[t] + c·β[t]·g_m[t] + c·δ·f[t] + √s²·(ε[t] − ε_center)`.
+`α` and `β` are per-day paths, `δ` the sector loading, and `g_m`, `f`, `ε` the market, sector, and own
+draws. `σ²_m`, `σ²_s`, `σ²_gen` are the fixed variances of the market growth, the sector factor, and the
+name's own growth; `r²` is the name's real single-index R²; `β²_mean` is the long-run mean of `β[t]²`.
+
+The variance split is fixed for the whole path: `v̄ = β²_mean·σ²_m + δ²·σ²_s` and `ρ̄ = v̄/σ²_gen`.
+If `r² ≥ r2_threshold`, `s² = v̄(1 − r²)/r²/σ²_gen` and `c = 1` (keep the real R²). Otherwise, if
+`ρ̄ ≤ 1 − floor`, `s² = 1 − ρ̄` and `c = 1` (match the name's variance). Otherwise both loadings shrink
+by `c = √((1 − floor)/ρ̄)`, `s² = floor`, and every day counts as clipped.
+Returns the growth path `g`, the per-day `β_eff = c·β`, and `n_clipped` (0 or the path length).
+"""
+function compose_name(α::AbstractVector, β::AbstractVector, δ::Real, g_m::AbstractVector,
+                      f::AbstractVector, ε::AbstractVector, σ²_m::Real, σ²_s::Real, σ²_gen::Real,
+                      r²::Real; ε_center::Real, β²_mean::Real, floor::Real=0.10,
+                      r2_threshold::Real=0.80)
+    T = length(g_m)
+    (length(α) == T && length(β) == T && length(f) == T && length(ε) == T) ||
+        throw(ArgumentError("α, β, g_m, f and ε must share one length; got $(length(α)), $(length(β)), $(T), $(length(f)), $(length(ε))"))
+    0 < floor < 1 || throw(ArgumentError("floor must lie in (0, 1); got $(floor)"))
+    σ²_gen > 0 || throw(ArgumentError("σ²_gen must be positive; got $(σ²_gen)"))
+    r² > 0 || throw(ArgumentError("r² must be positive; got $(r²)"))
+    β²_mean >= 0 || throw(ArgumentError("β²_mean must be non-negative; got $(β²_mean)"))
+    v̄ = β²_mean * σ²_m + δ^2 * σ²_s
+    ρ̄ = v̄ / σ²_gen
+    c = 1.0
+    n_clipped = 0
+    if r² >= r2_threshold
+        s² = v̄ * (1 - r²) / r² / σ²_gen
+    elseif ρ̄ <= 1 - floor
+        s² = 1 - ρ̄
+    else
+        c = sqrt((1 - floor) / ρ̄)
+        s² = floor
+        n_clipped = T
+    end
+    β_eff = c .* β
+    g = α .+ β_eff .* g_m .+ (c * δ) .* f .+ sqrt(s²) .* (ε .- ε_center)
+    return (g=collect(Float64, g), β_eff=collect(Float64, β_eff), n_clipped=n_clipped)
+end
