@@ -36,6 +36,7 @@ JumpHMM.StudentTCopula
 JumpHMM.VineCopula
 JumpHMM.SingleIndexModel
 JumpHMM.HybridSingleIndexModel
+JumpHMM.SectorFactorModel
 ```
 
 ### Bivariate Copula Families
@@ -66,6 +67,7 @@ JumpHMM.fit(::Type{StudentTCopula}, ::AbstractMatrix{Float64})
 JumpHMM.fit(::Type{VineCopula}, ::AbstractMatrix{Float64})
 JumpHMM.fit(::Type{SingleIndexModel}, ::AbstractMatrix{Float64}, ::AbstractVector{Float64})
 JumpHMM.fit(::Type{HybridSingleIndexModel}, ::Vector{String}, ::AbstractMatrix{<:Real}, ::String)
+JumpHMM.fit(::Type{SectorFactorModel}, ::Vector{String}, ::AbstractMatrix{<:Real}, ::String, ::Vector{String})
 JumpHMM.fit(::Type{PortfolioModel}, ::Vector{String}, ::AbstractMatrix{<:Real})
 JumpHMM.assign_states
 JumpHMM.estimate_transition
@@ -106,6 +108,7 @@ JumpHMM.sample_dependence(::StudentTCopula, ::Int)
 JumpHMM.sample_dependence(::VineCopula, ::Int)
 JumpHMM.sample_dependence(::SingleIndexModel, ::Int)
 JumpHMM.sample_dependence(::HybridSingleIndexModel, ::Int)
+JumpHMM.sample_dependence(::SectorFactorModel, ::Int)
 ```
 
 ### Finance Helpers
@@ -114,4 +117,15 @@ JumpHMM.excess_growth_rates(::AbstractVector{<:Real})
 JumpHMM.excess_growth_rates(::AbstractMatrix{<:Real})
 JumpHMM.excess_growth_rates(::Dict{String, DataFrame}, ::Vector{String})
 JumpHMM.prices_from_growth_rates
+```
+
+### Sector Factor Model Internals
+```@docs
+JumpHMM.ema_rate
+JumpHMM.drift_path
+JumpHMM.drift_variance
+JumpHMM.sector_factors
+JumpHMM.loo_loadings
+JumpHMM.sector_loadings
+JumpHMM.compose_name
 ```

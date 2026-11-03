@@ -23,6 +23,7 @@ makedocs(
             "Copulas" => "copulas.md",
             "Vine Copula" => "vine.md",
             "Single-Index Model" => "sim.md",
+            "Sector Factor Model" => "sector_factor.md",
             "Portfolio" => "portfolio.md",
         ],
 

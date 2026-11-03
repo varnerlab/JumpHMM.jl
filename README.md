@@ -55,6 +55,7 @@ Three interchangeable dependence models are available behind `AbstractDependence
 | `GaussianCopula` | Full n×n | None | Simple baseline |
 | `SingleIndexModel` | Through 1 factor | Inherited from market | 100+ asset universes |
 | `HybridSingleIndexModel` | 1 factor + HMM marginals + copula | Yes (from marginals + copula) | Variance-preserving synthetic data |
+| `SectorFactorModel` | Market + sector factors, no copula | From the shared market and sector draws | Sector co-movement with each name's own clustering and jumps |
 
 ```julia
 using JumpHMM
@@ -75,6 +76,10 @@ portfolio = fit(PortfolioModel, tickers, price_matrix;
 # Hybrid SIM approach (variance-corrected, preserves HMM marginals)
 portfolio = fit(PortfolioModel, tickers, price_matrix;
     dependence=HybridSingleIndexModel, market="SPY", rf=0.05)
+
+# Sector factor model (market + sector + own Jump-HMMs, no copula)
+portfolio = fit(PortfolioModel, tickers, price_matrix;
+    dependence=SectorFactorModel, market="SPY", sectors=sector_labels, rf=0.05)
 ```
 
 The interface is identical after `fit` — `tune`, `simulate`, and `validate` work the same regardless of the dependence model.
