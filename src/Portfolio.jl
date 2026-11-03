@@ -155,10 +155,14 @@ function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
         sectors_tuned = [tune(dep.sector_models[s], dep.sector_levels[:, s]; kwargs...)
                          for s in eachindex(dep.sector_models)]
         names_tuned = [tuned_marginals[t] for t in dep.tickers]
+        # tuning changes each name model's long-run mean, so recompute the noise centers (as the reference does,
+        # which centers after tuning)
+        centers = [mean(simulate(names_tuned[i], dep.center_steps; n_paths=1, seed=dep.center_seed + i).paths[1].observations)
+                   for i in eachindex(dep.tickers)]
         dep = SectorFactorModel(dep.tickers, dep.sector, dep.sectors, dep.sector_index, dep.α, dep.β, dep.δ,
-                                dep.r², dep.σ²_m, dep.σ²_s, dep.σ²_gen, dep.ε_center, dep.β_halflife,
+                                dep.r², dep.σ²_m, dep.σ²_s, dep.σ²_gen, centers, dep.β_halflife,
                                 dep.β_scale, dep.floor, dep.r2_threshold, market_tuned, sectors_tuned,
-                                names_tuned, dep.sector_levels)
+                                names_tuned, dep.sector_levels, dep.center_steps, dep.center_seed)
     end
 
     return PortfolioModel(portfolio.tickers, tuned_marginals, dep,
@@ -263,7 +267,7 @@ function simulate(portfolio::PortfolioModel, n_steps::Int;
         for p in 1:n_paths
             d = sample_dependence(dep, n_steps; seed=path_seeds[p])
             for (j, t) in enumerate(dep.tickers)
-                push!(results[t].paths, SimulationPath(fill(0, n_steps), d.G[:, j], d.jumps))
+                push!(results[t].paths, SimulationPath(fill(0, n_steps), d.G[:, j], d.name_jumps[:, j]))
             end
             push!(results[portfolio.market_ticker].paths, SimulationPath(d.m_states, d.g_m, d.jumps))
         end

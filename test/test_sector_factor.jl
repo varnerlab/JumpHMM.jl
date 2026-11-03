@@ -144,4 +144,27 @@ end
         @test dbig.n_clipped[1] == 100 && all(dbig.n_clipped[2:end] .== 0)
     end
 
+    @testset "codex audit fixes" begin
+        tickers, prices, sector = sector_universe()
+        pf = fit(PortfolioModel, tickers, prices; dependence=SectorFactorModel, market="MKT", sectors=sector,
+                 N=10, sector_options=(center_steps=20_000,))
+        dep = pf.dependence
+        # centering draws use seeds far from any path seed (reference: 4·10^12 + j)
+        @test dep.center_seed == 4 * 10^12 && dep.center_steps == 20_000
+        # tune recomputes each name's noise center from the tuned model
+        pt = tune(pf, prices; ϵ_range=range(5e-3, 1e-2, length=2), λ_range=range(10.0, 20.0, length=2), n_paths=4)
+        dt = pt.dependence
+        for i in eachindex(dt.tickers)
+            expected = mean(simulate(dt.name_models[i], dt.center_steps; n_paths=1, seed=dt.center_seed + i).paths[1].observations)
+            @test dt.ε_center[i] ≈ expected
+        end
+        # a name's jump flags mark days any of its components (market, sector, own) was in a jump episode
+        d = JumpHMM.sample_dependence(dt, 2_000; seed=4)
+        @test size(d.name_jumps) == (2_000, 6)
+        @test all(all(d.name_jumps[:, j] .>= d.jumps) for j in 1:6)
+        @test any(d.name_jumps[:, 1] .& .!d.jumps)              # own or sector episodes add days
+        r = simulate(pt, 300; n_paths=1, seed=2)
+        @test r.results["A1"].paths[1].jumps !== r.results["MKT"].paths[1].jumps
+    end
+
 end

@@ -288,6 +288,8 @@ struct SectorFactorModel <: AbstractDependenceModel
     sector_models::Vector{JumpHiddenMarkovModel}  # one per `sectors`
     name_models::Vector{JumpHiddenMarkovModel}    # one per `tickers`
     sector_levels::Matrix{Float64}                # compounded sector-factor series (price-like), for tune
+    center_steps::Int                             # length of the draw that sets each name's noise center
+    center_seed::Int                              # name i's centering draw uses seed center_seed + i
 end
 
 # --- Portfolio Types --------------------------------------------------------

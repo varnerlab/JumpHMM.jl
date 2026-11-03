@@ -183,7 +183,7 @@ name model `i` seeded with `center_seed + i`.
 Keywords: `rf=0.0`, `N=100`, `ν=5.0`, `dt=1/252`, `min_obs=2` (as for `JumpHiddenMarkovModel`);
 `intercept_pull=1.0` (1 keeps `α̂`, 0 sets every α to the mean); `β_halflife=126.0` (trading days);
 `β_scale=nothing` (zeros: fixed β); `floor=0.10`; `r2_threshold=0.80`; `center_steps=1_000_000`;
-`center_seed=4_000_000`.
+`center_seed=4·10^12` (far from every path seed, as in the reference).
 
 Returns the model and a `Dict` of the name models keyed by ticker.
 """
@@ -193,7 +193,7 @@ function fit(::Type{SectorFactorModel}, tickers::Vector{String}, prices::Abstrac
              intercept_pull::Float64=1.0, β_halflife::Float64=126.0,
              β_scale::Union{Nothing,Vector{Float64}}=nothing,
              floor::Float64=0.10, r2_threshold::Float64=0.80,
-             center_steps::Int=1_000_000, center_seed::Int=4_000_000)
+             center_steps::Int=1_000_000, center_seed::Int=4 * 10^12)
 
     size(prices, 2) == length(tickers) ||
         throw(ArgumentError("tickers length $(length(tickers)) must match columns of prices $(size(prices, 2))"))
@@ -248,18 +248,19 @@ function fit(::Type{SectorFactorModel}, tickers::Vector{String}, prices::Abstrac
 
     model = SectorFactorModel(names, sector, sf.sectors, sector_index, α, β̂, δ, r², σ²_m, σ²_s, σ²_gen,
                               ε_center, β_halflife, scale, floor, r2_threshold, market_model,
-                              sector_models, name_models, sector_levels)
+                              sector_models, name_models, sector_levels, center_steps, center_seed)
     marginals = Dict{String,JumpHiddenMarkovModel}(names[i] => name_models[i] for i in eachindex(names))
     return (model, marginals)
 end
 
 """
-    sample_dependence(model::SectorFactorModel, n; seed) → (g_m, m_states, jumps, F, G, β_eff, n_clipped)
+    sample_dependence(model::SectorFactorModel, n; seed) → (g_m, m_states, jumps, F, G, β_eff, n_clipped, name_jumps)
 
 Draw one `n`-day synthetic path of the whole universe. `g_m`, `m_states`, `jumps` are the market draw
 (growth, states, jump-episode flags); `F` (n × sectors) holds one draw of each sector model; `G`
 (n × names) the composed name growth; `β_eff` (n × names) each name's per-day β after any clipping;
-`n_clipped` (one per name) the number of days whose loadings were shrunk (0 or `n`, see `compose_name`).
+`n_clipped` (one per name) the number of days whose loadings were shrunk (0 or `n`, see `compose_name`);
+`name_jumps` (n × names) marks the days any of a name's components (market, sector, own) was in a jump episode.
 Seeds: market `seed`; sector `s` `10^12 + 10^4·seed + s`; name `j` `2·10^12 + 10^4·seed + j`; β-drift
 shocks from `Xoshiro(3·10^12 + seed)`. The streams stay distinct for `0 ≤ seed < 10^8` and fewer than
 10^4 names and sectors; outside that range `ArgumentError` is thrown. The same `seed` reproduces the
@@ -274,15 +275,20 @@ function sample_dependence(model::SectorFactorModel, n::Int; seed::Int)
     S = length(model.sectors)
     N = length(model.tickers)
     F = zeros(Float64, n, S)
+    sector_jumps = falses(n, S)
     for s in 1:S
-        F[:, s] = simulate(model.sector_models[s], n; n_paths=1, seed=10^12 + 10^4 * seed + s).paths[1].observations
+        path = simulate(model.sector_models[s], n; n_paths=1, seed=10^12 + 10^4 * seed + s).paths[1]
+        F[:, s] = path.observations
+        sector_jumps[:, s] = path.jumps
     end
     Z = randn(Xoshiro(3 * 10^12 + seed), n, N)
     G = zeros(Float64, n, N)
     β_eff = zeros(Float64, n, N)
     n_clipped = zeros(Int, N)
+    name_jumps = falses(n, N)
     for j in 1:N
-        ε = simulate(model.name_models[j], n; n_paths=1, seed=2 * 10^12 + 10^4 * seed + j).paths[1].observations
+        own = simulate(model.name_models[j], n; n_paths=1, seed=2 * 10^12 + 10^4 * seed + j).paths[1]
+        ε = own.observations
         β = model.β[j] .+ drift_path(view(Z, :, j), model.β_halflife, model.β_scale[j])
         s = model.sector_index[j]
         out = compose_name(fill(model.α[j], n), β, model.δ[j], mkt.observations, view(F, :, s), ε,
@@ -293,7 +299,8 @@ function sample_dependence(model::SectorFactorModel, n::Int; seed::Int)
         G[:, j] = out.g
         β_eff[:, j] = out.β_eff
         n_clipped[j] = out.n_clipped
+        name_jumps[:, j] = mkt.jumps .| view(sector_jumps, :, s) .| own.jumps
     end
     return (g_m=mkt.observations, m_states=mkt.states, jumps=mkt.jumps, F=F, G=G, β_eff=β_eff,
-            n_clipped=n_clipped)
+            n_clipped=n_clipped, name_jumps=name_jumps)
 end
