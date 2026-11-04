@@ -325,19 +325,41 @@ function compose(model::SectorFactorModel, draws)
     n_clipped = zeros(Int, N)
     name_jumps = falses(n, N)
     for j in 1:N
-        β = model.β[j] .+ drift_path(view(draws.Z, :, j), model.β_halflife, model.β_scale[j])
+        out = compose_name(model, draws, j)
         s = model.sector_index[j]
-        out = compose_name(fill(model.α[j], n), β, model.δ[j], draws.g_m, view(draws.F, :, s), view(draws.E, :, j),
-                           model.σ²_m, model.σ²_s[s], model.σ²_gen[j], model.r²[j];
-                           ε_center=model.ε_center[j],
-                           β²_mean=model.β[j]^2 + drift_variance(model.β_halflife, model.β_scale[j]),
-                           floor=model.floor, r2_threshold=model.r2_threshold)
         G[:, j] = out.g
         β_eff[:, j] = out.β_eff
         n_clipped[j] = out.n_clipped
         name_jumps[:, j] = draws.jumps .| view(draws.sector_jumps, :, s) .| view(draws.own_jumps, :, j)
     end
     return (G=G, β_eff=β_eff, n_clipped=n_clipped, name_jumps=name_jumps)
+end
+
+"""
+    compose_name(model::SectorFactorModel, draws, j::Int; α=nothing, β_halflife=model.β_halflife,
+        β_scale=nothing) → (g, β_eff, n_clipped)
+
+Compose name `j` alone from `draws` (`sample_draws`): column `j` of `compose(model, draws)`, computed
+without composing the other names. The keywords override name `j`'s intercept (yr⁻¹), the β-drift
+half-life (trading days) and its drift scale for this call only (`nothing` keeps the model's
+values), as `with_parameters` would for the
+whole model. Built for fits that vary one name's parameters many times on fixed draws. A `j` outside
+`1:length(model.tickers)` throws `ArgumentError`.
+"""
+function compose_name(model::SectorFactorModel, draws, j::Int; α::Union{Nothing,Real}=nothing,
+                      β_halflife::Real=model.β_halflife, β_scale::Union{Nothing,Real}=nothing)
+    1 <= j <= length(model.tickers) ||
+        throw(ArgumentError("name index $(j) is outside 1:$(length(model.tickers))"))
+    α = something(α, model.α[j])
+    β_scale = something(β_scale, model.β_scale[j])
+    n = length(draws.g_m)
+    s = model.sector_index[j]
+    β = model.β[j] .+ drift_path(view(draws.Z, :, j), β_halflife, β_scale)
+    return compose_name(fill(Float64(α), n), β, model.δ[j], draws.g_m, view(draws.F, :, s), view(draws.E, :, j),
+                        model.σ²_m, model.σ²_s[s], model.σ²_gen[j], model.r²[j];
+                        ε_center=model.ε_center[j],
+                        β²_mean=model.β[j]^2 + drift_variance(β_halflife, β_scale),
+                        floor=model.floor, r2_threshold=model.r2_threshold)
 end
 
 """

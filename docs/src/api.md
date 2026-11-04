@@ -111,6 +111,7 @@ JumpHMM.sample_dependence(::HybridSingleIndexModel, ::Int)
 JumpHMM.sample_dependence(::SectorFactorModel, ::Int)
 JumpHMM.sample_draws
 JumpHMM.compose
+JumpHMM.compose_name(::SectorFactorModel, ::Any, ::Int)
 JumpHMM.with_parameters
 ```
 
@@ -130,5 +131,5 @@ JumpHMM.drift_variance
 JumpHMM.sector_factors
 JumpHMM.loo_loadings
 JumpHMM.sector_loadings
-JumpHMM.compose_name
+JumpHMM.compose_name(::AbstractVector, ::AbstractVector, ::Real, ::AbstractVector, ::AbstractVector, ::AbstractVector, ::Real, ::Real, ::Real, ::Real)
 ```

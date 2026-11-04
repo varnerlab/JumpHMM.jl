@@ -205,6 +205,14 @@ include(joinpath(@__DIR__, "fixtures", "sector_factor_v020.jl"))   # 0.2.0 draws
         for i in 1:6
             @test g.ε_center[i] ≈ mean(simulate(given[i], 20_000; n_paths=1, seed=g.center_seed + i).paths[1].observations)
         end
+        # (f) one name at a time: the same columns as compose, and per-name parameter overrides
+        for j in (1, 4)
+            one = JumpHMM.compose_name(m, draws, j)
+            @test one.g == c.G[:, j] && one.β_eff == c.β_eff[:, j] && one.n_clipped == c.n_clipped[j]
+        end
+        w3 = JumpHMM.with_parameters(m; α=fill(0.07, 6), β_halflife=252.0, β_scale=fill(1.1, 6))
+        @test JumpHMM.compose_name(m, draws, 2; α=0.07, β_halflife=252.0, β_scale=1.1).g == JumpHMM.compose(w3, draws).G[:, 2]
+        @test_throws ArgumentError JumpHMM.compose_name(m, draws, 7)
         # (e) wrong lengths throw
         @test_throws ArgumentError fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, name_models=given[1:5])
         @test_throws ArgumentError fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, sector_models=sec[1:1])
