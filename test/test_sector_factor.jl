@@ -20,6 +20,8 @@ function sector_universe(; T::Int=3000, seed::Int=3, flip_S2::Bool=false)
     return (["MKT", "A1", "A2", "A3", "B1", "B2", "B3"], prices, sector)
 end
 
+include(joinpath(@__DIR__, "fixtures", "sector_factor_v020.jl"))   # 0.2.0 draws, for the 0.3.0 regression test
+
 @testset "SectorFactorModel" begin
 
     @testset "drift primitives" begin
@@ -165,6 +167,47 @@ end
         @test any(d.name_jumps[:, 1] .& .!d.jumps)              # own or sector episodes add days
         r = simulate(pt, 300; n_paths=1, seed=2)
         @test r.results["A1"].paths[1].jumps !== r.results["MKT"].paths[1].jumps
+    end
+
+    @testset "0.3.0: draws, compose, parameters, given models" begin
+        tickers, prices, sector = sector_universe()
+        m, _ = fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, center_steps=20_000,
+                   β_scale=fill(0.3, 6), intercept_pull=0.6)
+        # (a) sample_dependence is unchanged from 0.2.0
+        d = JumpHMM.sample_dependence(m, 60; seed=7)
+        # floats to rounding: Pkg.test's bounds checking changes summation order (differences near 1e-14)
+        @test isapprox(d.g_m, V020_g_m; atol=1e-10) && isapprox(d.F, V020_F; atol=1e-10)
+        @test isapprox(d.G, V020_G; atol=1e-10) && isapprox(d.β_eff, V020_β_eff; atol=1e-10)
+        @test d.n_clipped == V020_n_clipped && d.jumps == V020_jumps && d.name_jumps == V020_name_jumps
+        # (b) compose(sample_draws) reproduces sample_dependence
+        draws = JumpHMM.sample_draws(m, 60; seed=7)
+        c = JumpHMM.compose(m, draws)
+        @test c.G == d.G && c.β_eff == d.β_eff && c.n_clipped == d.n_clipped && c.name_jumps == d.name_jumps
+        @test draws.g_m == d.g_m && draws.F == d.F && size(draws.E) == (60, 6) && size(draws.Z) == (60, 6)
+        # (c) with_parameters: fixed β composes as a model fitted with fixed β; α and half-life are stored
+        m_fixed, _ = fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, center_steps=20_000, intercept_pull=0.6)
+        w = JumpHMM.with_parameters(m; β_scale=zeros(6))
+        @test JumpHMM.compose(w, draws).G == JumpHMM.compose(m_fixed, JumpHMM.sample_draws(m_fixed, 60; seed=7)).G
+        w2 = JumpHMM.with_parameters(m; α=fill(0.05, 6), β_halflife=63.0)
+        @test w2.α == fill(0.05, 6) && w2.β_halflife == 63.0 && w2.β_scale == m.β_scale && w2.name_models === m.name_models
+        @test JumpHMM.compose(w2, draws).G != c.G
+        @test_throws ArgumentError JumpHMM.with_parameters(m; α=zeros(5))
+        @test_throws ArgumentError JumpHMM.with_parameters(m; β_scale=zeros(7))
+        @test_throws ArgumentError JumpHMM.with_parameters(m; β_halflife=0.0)
+        # (d) given models replace the fitted ones, and the noise centers use the given name models
+        given = [fit(JumpHiddenMarkovModel, prices[:, j]; N=6) for j in 2:7]
+        mkt = fit(JumpHiddenMarkovModel, prices[:, 1]; N=6)
+        sec = m.sector_models
+        g, marg = fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, center_steps=20_000,
+                      name_models=given, market_model=mkt, sector_models=sec)
+        @test all(g.name_models[i] === given[i] for i in 1:6) && g.market_model === mkt
+        @test all(g.sector_models[s] === sec[s] for s in 1:2) && marg["A1"] === given[1]
+        for i in 1:6
+            @test g.ε_center[i] ≈ mean(simulate(given[i], 20_000; n_paths=1, seed=g.center_seed + i).paths[1].observations)
+        end
+        # (e) wrong lengths throw
+        @test_throws ArgumentError fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, name_models=given[1:5])
+        @test_throws ArgumentError fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, sector_models=sec[1:1])
     end
 
 end

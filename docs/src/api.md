@@ -109,6 +109,9 @@ JumpHMM.sample_dependence(::VineCopula, ::Int)
 JumpHMM.sample_dependence(::SingleIndexModel, ::Int)
 JumpHMM.sample_dependence(::HybridSingleIndexModel, ::Int)
 JumpHMM.sample_dependence(::SectorFactorModel, ::Int)
+JumpHMM.sample_draws
+JumpHMM.compose
+JumpHMM.with_parameters
 ```
 
 ### Finance Helpers

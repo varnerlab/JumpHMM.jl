@@ -58,3 +58,23 @@ d = sample_dependence(portfolio.dependence, 252; seed=1)
 ```
 
 Every sector needs at least two names. The same `seed` reproduces a path exactly.
+
+## Calibrating the generator yourself
+A caller that fits its own component models, or calibrates the drift against its own estimator, can
+use three tools (version 0.3.0):
+- `fit(SectorFactorModel, ...; market_model, name_models, sector_models)` stores models fitted or tuned
+  elsewhere instead of fitting them; the noise centers come from the name models it stores.
+- `sample_draws(model, n; seed)` returns every random component of a path, and `compose(model, draws)`
+  turns them into name growth rates. `sample_dependence(model, n; seed)` is the two together.
+- `with_parameters(model; α, β_halflife, β_scale)` copies the model with new intercepts and β drift.
+
+Together they let a fit hold the randomness fixed and change only the parameters:
+
+```julia
+bank = [JumpHMM.sample_draws(model, n_days; seed=p) for p in 1:20]   # fixed draws
+for k in (2.0, 4.0, 6.0)
+    trial = JumpHMM.with_parameters(model; β_scale=fill(k, length(model.tickers)))
+    G = [JumpHMM.compose(trial, d).G for d in bank]                # same draws, new drift
+    # ... compare a statistic of G with its real value and keep the best k
+end
+```
