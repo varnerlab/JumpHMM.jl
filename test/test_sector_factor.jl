@@ -71,18 +71,28 @@ end
         idx = [findfirst(==(s), sf.sectors) for s in sector]
         U = JumpHMM.own_residuals(E, sf.F, δ, idx)
         @test U[:, 3] ≈ E[:, 3] .- δ[3] .* sf.F[:, 2]
-        ψ = JumpHMM.own_scales(E, sf.F, U, δ, idx; tickers=["a1", "a2", "b1", "b2"])
-        # the sector and own terms together carry the single-index residual variance
+        ov = JumpHMM.own_variances(E, sf.F, U, δ, idx; tickers=["a1", "a2", "b1", "b2"])
+        # the drift, sector and own terms together carry the single-index residual variance
         for i in 1:4
-            @test δ[i]^2 * var(sf.F[:, idx[i]]) + ψ[i]^2 * var(U[:, i]) ≈ var(E[:, i])
+            for σ²_drift in (0.0, 0.2 * ov.σ²_own[i])
+                ψ = JumpHMM.own_scale(ov.σ²_own[i], ov.σ²_u[i], σ²_drift)
+                @test σ²_drift + δ[i]^2 * var(sf.F[:, idx[i]]) + ψ^2 * var(U[:, i]) ≈ var(E[:, i])
+            end
         end
         # a sector term that carries more than the residual variance throws and names the ticker
         err = try
-            JumpHMM.own_scales(E, sf.F, U, 10 .* δ, idx; tickers=["a1", "a2", "b1", "b2"]); nothing
+            JumpHMM.own_variances(E, sf.F, U, 10 .* δ, idx; tickers=["a1", "a2", "b1", "b2"]); nothing
         catch e
             e
         end
         @test err isa ArgumentError && occursin("a1", err.msg)
+        # so does a β drift whose variance fills the own variance
+        err = try
+            JumpHMM.own_scale(ov.σ²_own[2], ov.σ²_u[2], ov.σ²_own[2]; ticker="a2"); nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError && occursin("a2", err.msg)
     end
 
     @testset "fit SectorFactorModel" begin
@@ -202,6 +212,9 @@ end
         m_fixed, _ = fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, center_steps=20_000, intercept_pull=0.6)
         w = JumpHMM.with_parameters(m; β_scale=zeros(6))
         @test JumpHMM.compose(w, draws).G == JumpHMM.compose(m_fixed, JumpHMM.sample_draws(m_fixed, 60; seed=7)).G
+        # the own scales follow the drift: no drift gives the fixed-β scales, a drift shrinks them
+        @test w.ψ == JumpHMM.own_scales(m; β_scale=zeros(6)) && m.ψ == JumpHMM.own_scales(m)
+        @test all(m.ψ .< w.ψ)
         w2 = JumpHMM.with_parameters(m; α=fill(0.05, 6), β_halflife=63.0)
         @test w2.α == fill(0.05, 6) && w2.β_halflife == 63.0 && w2.β_scale == m.β_scale && w2.own_models === m.own_models
         @test JumpHMM.compose(w2, draws).G != c.G

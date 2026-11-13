@@ -166,7 +166,7 @@ function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
         centers = [mean(simulate(own_tuned[i], dep.center_steps; n_paths=1, seed=dep.center_seed + i).paths[1].observations)
                    for i in eachindex(dep.tickers)]
         dep = SectorFactorModel(dep.tickers, dep.sector, dep.sectors, dep.sector_index, dep.α, dep.β, dep.δ,
-                                dep.r², dep.ψ, centers, dep.β_halflife, dep.β_scale, market_tuned, sectors_tuned,
+                                dep.r², dep.ψ, dep.σ²_own, dep.σ²_u, dep.σ²_m, centers, dep.β_halflife, dep.β_scale, market_tuned, sectors_tuned,
                                 own_tuned, dep.sector_levels, dep.own_levels, dep.center_steps, dep.center_seed)
     end
 

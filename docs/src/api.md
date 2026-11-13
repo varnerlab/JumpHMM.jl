@@ -132,6 +132,8 @@ JumpHMM.sector_factors
 JumpHMM.loo_loadings
 JumpHMM.sector_loadings
 JumpHMM.own_residuals
+JumpHMM.own_variances
+JumpHMM.own_scale
 JumpHMM.own_scales
 JumpHMM.compose_name(::AbstractVector, ::AbstractVector, ::Real, ::AbstractVector, ::AbstractVector, ::AbstractVector)
 ```

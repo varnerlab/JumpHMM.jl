@@ -23,16 +23,20 @@ The Jump-HMM itself is described by Alswaidan and Varner (arXiv:2603.10202).
   sector, scaled once per sector so the generator reproduces the sector's mean pairwise residual covariance.
 - ``\tilde{\varepsilon}_i``: a Jump-HMM fit to the residual left after the sector term,
   ``u_i(t) = \varepsilon_i(t) - \delta_i f_s(t)`` (`own_residuals`), compounded the same way.
-- ``\psi_i``: the scale of the own draw, set so the sector and own terms together carry the variance of the
-  name's single-index residual (`own_scales`):
+- ``\psi_i``: the scale of the own draw, set so the β drift, the sector term and the own term together carry
+  the variance of the name's single-index residual (`own_variances`, `own_scale`):
 
 ```math
-\psi_i^2 = \frac{\operatorname{Var}(\varepsilon_i) - \delta_i^2 \operatorname{Var}(f_s)}{\operatorname{Var}(u_i)}
+\psi_i^2 = \frac{\operatorname{Var}(\varepsilon_i) - \delta_i^2 \operatorname{Var}(f_s) - \sigma_{x,i}^2 \operatorname{Var}(g_m)}{\operatorname{Var}(u_i)}
 ```
 
-The sector factor averages the residuals of its names, name ``i`` included, so part of ``u_i`` can still move
-with ``f_s``. Independent draws drop that shared part, and ``\psi_i`` puts it back. With two names per sector,
-``\psi_i`` is well above 1; with many names per sector, it is close to 1.
+Here ``\sigma_{x,i}^2`` is the variance of the β drift (`drift_variance(β_halflife, β_scale[i])`), zero for a
+fixed β. The single-index residual comes from a fit with a fixed β, so it already holds the real β's movement,
+and subtracting the drift's variance keeps the synthetic drift from adding it a second time. The sector factor
+averages the residuals of its names, name ``i`` included, so part of ``u_i`` can still move with ``f_s``.
+Independent draws drop that shared part, and ``\psi_i`` puts it back. With two names per sector and a fixed β,
+``\psi_i`` is well above 1; with many names per sector, it is close to 1, and a drifting β lowers it.
+`with_parameters` recomputes ``\psi`` when the drift changes.
 
 ## Why no copula
 Names are linked only through the market and sector draws they share on the same day. A copula imposes a

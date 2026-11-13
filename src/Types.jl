@@ -263,7 +263,7 @@ end
 Multi-asset composition with one market model, one model per sector, and one own model per name:
     g_i(t) = α_i + β_i(t)·g_m(t) + δ_i·f_s(t) + ψ_i·ε̃_i(t)
 The own model of name i is fit to its single-index residual after the sector term; ψ_i sizes its draw so
-the sector and own terms carry the name's single-index residual variance. Names are linked only through the shared market draw `g_m` and sector draw `f_s` on the same day
+the β drift, sector and own terms carry the name's single-index residual variance. Names are linked only through the shared market draw `g_m` and sector draw `f_s` on the same day
 (no copula). α and β come from the single-index fit; β is fixed unless `β_scale` is nonzero, in which
 case it drifts as an exponential moving average of normal shocks with half-life `β_halflife`.
 See `fit(SectorFactorModel, ...)` and `sample_dependence(::SectorFactorModel, n; seed)`.
@@ -277,7 +277,10 @@ struct SectorFactorModel <: AbstractDependenceModel
     β::Vector{Float64}                            # single-index β̂
     δ::Vector{Float64}                            # sector loadings
     r²::Vector{Float64}                           # real R² of the single-index fit
-    ψ::Vector{Float64}                            # scale of each name's own draw
+    ψ::Vector{Float64}                            # scale of each name's own draw, under the stored β drift
+    σ²_own::Vector{Float64}                       # var(e) − δ²·var(f): residual variance left to the own term, yr⁻²
+    σ²_u::Vector{Float64}                         # variance of each own model's training series, yr⁻²
+    σ²_m::Float64                                 # variance of the market's growth over the fit window, yr⁻²
     ε_center::Vector{Float64}                     # long-run mean of each own model, yr⁻¹
     β_halflife::Float64                           # trading days
     β_scale::Vector{Float64}                      # per-name drift scale; zeros = fixed β

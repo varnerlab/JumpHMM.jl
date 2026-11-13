@@ -4,8 +4,8 @@
 #   g_i(t) = α_i + β_i(t)·g_m(t) + δ_i·f_s(t) + ψ_i·ε̃_i(t)
 # where g_m is one draw of the market model, f_s one draw of the model of name i's sector factor
 # (the mean single-index residual of its sector), and ε̃_i one draw of the model of name i's residual
-# after its sector term, centered on that model's long-run mean. ψ_i sizes the own draw so the sector
-# and own terms carry the name's single-index residual variance. Names are linked only through the
+# after its sector term, centered on that model's long-run mean. ψ_i sizes the own draw so the β drift,
+# sector and own terms carry the name's single-index residual variance. Names are linked only through the
 # shared market and sector draws on the same day; there is no copula.
 
 """
@@ -130,7 +130,7 @@ end
 Compose one name's daily growth `g[t] = α[t] + β[t]·g_m[t] + δ·f[t] + ψ·(ε[t] − ε_center)`.
 `α` and `β` are per-day paths (yr⁻¹ and 1), `δ` the sector loading, and `g_m`, `f`, `ε` the market,
 sector, and own draws (yr⁻¹). The own draw comes from the model of the name's residual after its sector
-term; `ε_center` is that model's long-run mean (yr⁻¹) and `ψ` the scale of the own draw (`own_scales`).
+term; `ε_center` is that model's long-run mean (yr⁻¹) and `ψ` the scale of the own draw (`own_scale`).
 Returns the growth path `g` and the per-day β path `β_path`.
 """
 function compose_name(α::AbstractVector, β::AbstractVector, δ::Real, g_m::AbstractVector,
@@ -161,22 +161,62 @@ function own_residuals(E::AbstractMatrix, F::AbstractMatrix, δ::AbstractVector,
 end
 
 """
-    own_scales(E, F, U, δ, sector_index; tickers) → Vector{Float64}
+    own_variances(E, F, U, δ, sector_index; tickers) → (σ²_own, σ²_u)
 
-Scale `ψᵢ` of each name's own draw. The sector and own terms together carry the variance of the name's
-single-index residual: `ψᵢ² = (var(Eᵢ) − δᵢ²·var(F_s)) / var(Uᵢ)`, where `U = own_residuals(E, F, δ, sector_index)`.
-`ψᵢ` differs from 1 when part of `Uᵢ` still moves with the sector factor, which happens because the sector factor
-averages the residuals of its names, name `i` included; with many names per sector, `ψᵢ` is close to 1. Throws `ArgumentError` (naming the ticker) when the
+The variances that size each name's own draw: `σ²_own[i] = var(Eᵢ) − δᵢ²·var(F_s)`, the part of the
+single-index residual's variance that the sector term leaves to the own term, and `σ²_u[i] = var(Uᵢ)`,
+where `U = own_residuals(E, F, δ, sector_index)`. Throws `ArgumentError` (naming the ticker) when the
 sector term alone carries the whole residual variance.
 """
-function own_scales(E::AbstractMatrix, F::AbstractMatrix, U::AbstractMatrix, δ::AbstractVector,
-                    sector_index::Vector{Int}; tickers::Vector{String})::Vector{Float64}
-    ψ = zeros(Float64, size(E, 2))
-    for i in 1:size(E, 2)
-        own_variance = var(view(E, :, i)) - δ[i]^2 * var(view(F, :, sector_index[i]))
-        own_variance > 0 ||
-            throw(ArgumentError("name $(tickers[i]): the sector term carries the whole residual variance (left over: $(own_variance))"))
-        ψ[i] = sqrt(own_variance / var(view(U, :, i)))
+function own_variances(E::AbstractMatrix, F::AbstractMatrix, U::AbstractMatrix, δ::AbstractVector,
+                       sector_index::Vector{Int}; tickers::Vector{String})
+    N = size(E, 2)
+    σ²_own = zeros(Float64, N)
+    σ²_u = zeros(Float64, N)
+    for i in 1:N
+        σ²_own[i] = var(view(E, :, i)) - δ[i]^2 * var(view(F, :, sector_index[i]))
+        if σ²_own[i] <= 0
+            throw(ArgumentError("name $(tickers[i]): the sector term carries the whole residual variance (left over: $(σ²_own[i]))"))
+        end
+        σ²_u[i] = var(view(U, :, i))
+    end
+    return (σ²_own=σ²_own, σ²_u=σ²_u)
+end
+
+"""
+    own_scale(σ²_own, σ²_u, σ²_drift; ticker="") → Float64
+
+Scale `ψ` of one name's own draw: `ψ² = (σ²_own − σ²_drift) / σ²_u`, with `σ²_own` and `σ²_u` from
+`own_variances`. `σ²_drift` is the variance a drifting β adds to the name's residual,
+`drift_variance(β_halflife, β_scale)` times the market's growth variance; it is zero for a fixed β.
+
+The single-index residual comes from a fit with a fixed β, so it already holds the real β's movement.
+Subtracting `σ²_drift` keeps the synthetic drift from adding that variance a second time, and the drift,
+sector and own terms together carry the residual's variance. `ψ` differs from 1 also because the sector
+factor averages the residuals of its names, name `i` included, so part of `Uᵢ` still moves with the sector
+factor; independent draws drop that shared part, and `ψ` puts it back. Throws `ArgumentError` (naming
+`ticker`) when the drift's variance fills the whole own variance.
+"""
+function own_scale(σ²_own::Real, σ²_u::Real, σ²_drift::Real; ticker::String="")::Float64
+    room = σ²_own - σ²_drift
+    if room <= 0
+        throw(ArgumentError("name $(ticker): the β drift's variance $(σ²_drift) fills the own variance $(σ²_own)"))
+    end
+    return sqrt(room / σ²_u)
+end
+
+"""
+    own_scales(model::SectorFactorModel; β_halflife=model.β_halflife, β_scale=model.β_scale) → Vector{Float64}
+
+Each name's `own_scale` under the given β drift; with the defaults, `model.ψ`.
+"""
+function own_scales(model::SectorFactorModel; β_halflife::Real=model.β_halflife,
+                    β_scale::AbstractVector{<:Real}=model.β_scale)::Vector{Float64}
+    N = length(model.tickers)
+    ψ = zeros(Float64, N)
+    for i in 1:N
+        σ²_drift = drift_variance(β_halflife, β_scale[i]) * model.σ²_m
+        ψ[i] = own_scale(model.σ²_own[i], model.σ²_u[i], σ²_drift; ticker=model.tickers[i])
     end
     return ψ
 end
@@ -190,7 +230,8 @@ Every sector needs at least two names.
 
 Steps: growth rates `G = excess_growth_rates(prices; rf, dt)`; single-index OLS of each name on the
 market → `α̂`, `β̂`, `r²`, residuals `E`; `sector_factors` and `sector_loadings` of `E`; each name's residual
-after its sector term (`own_residuals`) and the scale of its own draw (`own_scales`); intercepts
+after its sector term (`own_residuals`) and the variances that size its own draw (`own_variances`), from which
+`ψ` follows for the given β drift (`own_scale`); intercepts
 `α = ᾱ + intercept_pull·(α̂ − ᾱ)`; a Jump-HMM for the market (its prices), for each sector (the compounded
 sector factor, `100·exp(cumsum(F·dt))`), and for each name's own residual (compounded the same way). The
 sector and own models are fit with `rf = 0`. `ε_center[i]` is the mean of one `center_steps`-day draw of
@@ -243,9 +284,10 @@ function fit(::Type{SectorFactorModel}, tickers::Vector{String}, prices::Abstrac
     δ = sector_loadings(E, sector)
     sector_index = [findfirst(==(s), sf.sectors) for s in sector]
 
-    # each name's residual after its sector term, and the scale of its own draw
+    # each name's residual after its sector term, and the variances that size its own draw
     U = own_residuals(E, sf.F, δ, sector_index)
-    ψ = own_scales(E, sf.F, U, δ, sector_index; tickers=names)
+    ov = own_variances(E, sf.F, U, δ, sector_index; tickers=names)
+    σ²_m = var(g_m)
 
     # intercepts, optionally pulled toward the universe mean
     ᾱ = mean(α̂)
@@ -275,8 +317,15 @@ function fit(::Type{SectorFactorModel}, tickers::Vector{String}, prices::Abstrac
     length(scale) == length(names) ||
         throw(ArgumentError("β_scale has $(length(scale)) entries but there are $(length(names)) names"))
 
-    model = SectorFactorModel(names, sector, sf.sectors, sector_index, α, β̂, δ, r², ψ, ε_center,
-                              β_halflife, scale, market_model, sector_models, own_models,
+    # the scale of each own draw under this β drift
+    ψ = zeros(Float64, length(names))
+    for i in eachindex(names)
+        σ²_drift = drift_variance(β_halflife, scale[i]) * σ²_m
+        ψ[i] = own_scale(ov.σ²_own[i], ov.σ²_u[i], σ²_drift; ticker=names[i])
+    end
+
+    model = SectorFactorModel(names, sector, sf.sectors, sector_index, α, β̂, δ, r², ψ, ov.σ²_own, ov.σ²_u, σ²_m,
+                              ε_center, β_halflife, scale, market_model, sector_models, own_models,
                               sector_levels, own_levels, center_steps, center_seed)
     own = Dict{String,JumpHiddenMarkovModel}(names[i] => own_models[i] for i in eachindex(names))
     return (model, own)
@@ -357,7 +406,7 @@ Compose name `j` alone from `draws` (`sample_draws`): column `j` of `compose(mod
 without composing the other names. The keywords override name `j`'s intercept (yr⁻¹), the β-drift
 half-life (trading days) and its drift scale for this call only (`nothing` keeps the model's
 values), as `with_parameters` would for the
-whole model. Built for fits that vary one name's parameters many times on fixed draws. A `j` outside
+whole model; the own scale follows the drift (`own_scale`). Built for fits that vary one name's parameters many times on fixed draws. A `j` outside
 `1:length(model.tickers)` throws `ArgumentError`.
 """
 function compose_name(model::SectorFactorModel, draws, j::Int; α::Union{Nothing,Real}=nothing,
@@ -369,8 +418,10 @@ function compose_name(model::SectorFactorModel, draws, j::Int; α::Union{Nothing
     n = length(draws.g_m)
     s = model.sector_index[j]
     β = model.β[j] .+ drift_path(view(draws.Z, :, j), β_halflife, β_scale)
+    ψ = own_scale(model.σ²_own[j], model.σ²_u[j], drift_variance(β_halflife, β_scale) * model.σ²_m;
+                  ticker=model.tickers[j])
     return compose_name(fill(Float64(α), n), β, model.δ[j], draws.g_m, view(draws.F, :, s), view(draws.E, :, j);
-                        ψ=model.ψ[j], ε_center=model.ε_center[j])
+                        ψ=ψ, ε_center=model.ε_center[j])
 end
 
 """
@@ -378,8 +429,9 @@ end
         β_scale=model.β_scale) → SectorFactorModel
 
 A copy of `model` with new intercepts `α` (one per name, yr⁻¹), β-drift half-life `β_halflife`
-(trading days, > 0) and per-name drift scales `β_scale` (≥ 0; zeros = fixed β). Every other field,
-including the fitted Jump-HMMs, is shared with `model`. Wrong lengths or values throw `ArgumentError`.
+(trading days, > 0) and per-name drift scales `β_scale` (≥ 0; zeros = fixed β). The own scales `ψ` are
+recomputed for the new drift (`own_scales`). Every other field, including the fitted Jump-HMMs, is shared
+with `model`. Wrong lengths or values throw `ArgumentError`.
 """
 function with_parameters(model::SectorFactorModel; α::AbstractVector{<:Real}=model.α,
                          β_halflife::Real=model.β_halflife, β_scale::AbstractVector{<:Real}=model.β_scale)
@@ -392,6 +444,7 @@ function with_parameters(model::SectorFactorModel; α::AbstractVector{<:Real}=mo
     vals[findfirst(==(:α), fieldnames(SectorFactorModel))] = Vector{Float64}(α)
     vals[findfirst(==(:β_halflife), fieldnames(SectorFactorModel))] = Float64(β_halflife)
     vals[findfirst(==(:β_scale), fieldnames(SectorFactorModel))] = Vector{Float64}(β_scale)
+    vals[findfirst(==(:ψ), fieldnames(SectorFactorModel))] = own_scales(model; β_halflife=β_halflife, β_scale=β_scale)
     return SectorFactorModel(vals...)
 end
 
