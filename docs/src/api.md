@@ -131,5 +131,7 @@ JumpHMM.drift_variance
 JumpHMM.sector_factors
 JumpHMM.loo_loadings
 JumpHMM.sector_loadings
-JumpHMM.compose_name(::AbstractVector, ::AbstractVector, ::Real, ::AbstractVector, ::AbstractVector, ::AbstractVector, ::Real, ::Real, ::Real, ::Real)
+JumpHMM.own_residuals
+JumpHMM.own_scales
+JumpHMM.compose_name(::AbstractVector, ::AbstractVector, ::Real, ::AbstractVector, ::AbstractVector, ::AbstractVector)
 ```

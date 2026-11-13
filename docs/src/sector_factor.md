@@ -2,26 +2,37 @@
 
 ## Overview
 The sector factor model builds a synthetic universe from three layers of Jump-HMMs: one for the market,
-one for each sector, and one for each name. The daily growth rate of name ``i`` in sector ``s`` is
+one for each sector, and one for each name's own residual. The daily growth rate of name ``i`` in sector
+``s`` is
 
 ```math
-g_i(t) = \alpha_i + \beta_i(t)\, g_m(t) + \delta_i\, f_s(t) + s_i\, \tilde{\varepsilon}_i(t)
+g_i(t) = \alpha_i + \beta_i(t)\, g_m(t) + \delta_i\, f_s(t) + \psi_i\, \tilde{\varepsilon}_i(t)
 ```
 
-where ``g_m(t)`` is one draw of the market model, ``f_s(t)`` one draw of the model of the name's sector,
-and ``\tilde{\varepsilon}_i(t)`` one draw of the name's own model, centered on that model's long-run mean.
-It is the composition used in the INFORMS 2026 study of interpretable allocation and model-predictive
-rebalancing (Varner, arXiv:2611.03022), built on the Jump-HMM of Alswaidan and Varner (arXiv:2603.10202).
+where ``g_m(t)`` is one draw of the market model, ``f_s(t)`` one draw of the model of the name's sector
+factor, and ``\tilde{\varepsilon}_i(t)`` one draw of the model of the name's residual after its sector term,
+centered on that model's long-run mean. Each term is a model of the piece of the growth rate it stands for.
+The Jump-HMM itself is described by Alswaidan and Varner (arXiv:2603.10202).
 
 ## What each piece is fit to
-- ``\alpha_i``, ``\beta_i``: an ordinary least squares single-index fit of the name's growth on the market's.
+- ``\alpha_i``, ``\beta_i``: an ordinary least squares single-index fit of the name's growth on the market's,
+  with residual ``\varepsilon_i(t)``.
 - ``f_s``: the equal-weight mean of the single-index residuals of the names in sector ``s``, compounded into
   a price-like series and fit with its own Jump-HMM.
 - ``\delta_i``: the leave-one-out slope of the name's residual on the mean of the other residuals in its
   sector, scaled once per sector so the generator reproduces the sector's mean pairwise residual covariance.
-- ``s_i``: chosen so each name keeps its real variance; if the market and sector terms would explain more
-  than `1 - floor` of it, both loadings shrink and ``s_i^2`` = `floor`. Names whose real R² is at least
-  `r2_threshold` keep their real R² instead.
+- ``\tilde{\varepsilon}_i``: a Jump-HMM fit to the residual left after the sector term,
+  ``u_i(t) = \varepsilon_i(t) - \delta_i f_s(t)`` (`own_residuals`), compounded the same way.
+- ``\psi_i``: the scale of the own draw, set so the sector and own terms together carry the variance of the
+  name's single-index residual (`own_scales`):
+
+```math
+\psi_i^2 = \frac{\operatorname{Var}(\varepsilon_i) - \delta_i^2 \operatorname{Var}(f_s)}{\operatorname{Var}(u_i)}
+```
+
+The sector factor averages the residuals of its names, name ``i`` included, so part of ``u_i`` can still move
+with ``f_s``. Independent draws drop that shared part, and ``\psi_i`` puts it back. With two names per sector,
+``\psi_i`` is well above 1; with many names per sector, it is close to 1.
 
 ## Why no copula
 Names are linked only through the market and sector draws they share on the same day. A copula imposes a
@@ -45,7 +56,7 @@ sectors = ["Financials", "Financials", "Energy", "Energy"]   # one label per non
 
 portfolio = fit(PortfolioModel, tickers, prices;
                 dependence=SectorFactorModel, market="SPY", sectors=sectors, N=50)
-portfolio = tune(portfolio, prices)                 # tunes the market, sector, and name models
+portfolio = tune(portfolio, prices)                 # tunes the market, sector, and own models
 result = simulate(portfolio, 252; n_paths=100, seed=1)
 result.results["SPY"]                              # the synthetic market paths are returned too
 
@@ -57,13 +68,16 @@ drifting = fit(PortfolioModel, tickers, prices; dependence=SectorFactorModel, ma
 d = sample_dependence(portfolio.dependence, 252; seed=1)
 ```
 
-Every sector needs at least two names. The same `seed` reproduces a path exactly.
+Every sector needs at least two names. The same `seed` reproduces a path exactly. For a
+`SectorFactorModel` portfolio, `portfolio.marginals` holds the own models, and `validate` checks each one
+against its residual series.
 
 ## Calibrating the generator yourself
 A caller that fits its own component models, or calibrates the drift against its own estimator, can
-use three tools (version 0.3.0):
-- `fit(SectorFactorModel, ...; market_model, name_models, sector_models)` stores models fitted or tuned
-  elsewhere instead of fitting them; the noise centers come from the name models it stores.
+use three tools:
+- `fit(SectorFactorModel, ...; market_model, own_models, sector_models)` stores models fitted or tuned
+  elsewhere instead of fitting them; the noise centers come from the own models it stores. Own models must
+  describe each name's residual after its sector term (`model.own_levels` holds those series, compounded).
 - `sample_draws(model, n; seed)` returns every random component of a path, and `compose(model, draws)`
   turns them into name growth rates. `sample_dependence(model, n; seed)` is the two together.
 - `with_parameters(model; α, β_halflife, β_scale)` copies the model with new intercepts and β drift.

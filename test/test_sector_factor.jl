@@ -20,8 +20,6 @@ function sector_universe(; T::Int=3000, seed::Int=3, flip_S2::Bool=false)
     return (["MKT", "A1", "A2", "A3", "B1", "B2", "B3"], prices, sector)
 end
 
-include(joinpath(@__DIR__, "fixtures", "sector_factor_v020.jl"))   # 0.2.0 draws, for the 0.3.0 regression test
-
 @testset "SectorFactorModel" begin
 
     @testset "drift primitives" begin
@@ -56,19 +54,35 @@ include(joinpath(@__DIR__, "fixtures", "sector_factor_v020.jl"))   # 0.2.0 draws
     @testset "compose_name" begin
         T = 4; α = fill(0.1, T); β = fill(1.2, T)
         g_m = [1.0, -2.0, 0.5, 0.0]; f = [0.3, 0.0, -0.1, 0.2]; ε = [0.5, 0.5, 1.5, -0.5]
-        out = JumpHMM.compose_name(α, β, 0.5, g_m, f, ε, 1.0, 1.0, 4.0, 0.3; ε_center=0.5, β²_mean=1.44)
-        s² = 1 - (1.44 + 0.25) / 4.0
-        @test out.g ≈ 0.1 .+ 1.2 .* g_m .+ 0.5 .* f .+ sqrt(s²) .* (ε .- 0.5)
-        @test out.n_clipped == 0 && out.β_eff == β
-        # factor share above 1 - floor: loadings shrink, own scale = floor
-        hi = JumpHMM.compose_name(α, fill(3.0, T), 0.5, g_m, f, ε, 1.0, 1.0, 4.0, 0.3; ε_center=0.0, β²_mean=9.0)
-        c = sqrt(0.9 / ((9.0 + 0.25) / 4.0))
-        @test hi.n_clipped == T && hi.β_eff ≈ fill(3.0c, T)
-        @test hi.g ≈ 0.1 .+ 3.0c .* g_m .+ 0.5c .* f .+ sqrt(0.10) .* ε
-        # high real R²: keep the real R² (own-noise share from v̄(1 − r²)/r²)
-        r2 = JumpHMM.compose_name(α, β, 0.5, g_m, f, ε, 1.0, 1.0, 4.0, 0.9; ε_center=0.0, β²_mean=1.44)
-        @test r2.g ≈ 0.1 .+ 1.2 .* g_m .+ 0.5 .* f .+ sqrt((1.44 + 0.25) * (1 - 0.9) / 0.9 / 4.0) .* ε
-        @test_throws ArgumentError JumpHMM.compose_name(α, β, 0.5, g_m, f[1:3], ε, 1.0, 1.0, 4.0, 0.3; ε_center=0.0, β²_mean=1.44)
+        out = JumpHMM.compose_name(α, β, 0.5, g_m, f, ε; ψ=1.3, ε_center=0.5)
+        @test out.g ≈ 0.1 .+ 1.2 .* g_m .+ 0.5 .* f .+ 1.3 .* (ε .- 0.5)
+        @test out.β_path == β
+        @test_throws ArgumentError JumpHMM.compose_name(α, β, 0.5, g_m, f[1:3], ε; ψ=1.0, ε_center=0.0)
+        @test_throws ArgumentError JumpHMM.compose_name(α, β, 0.5, g_m, f, ε; ψ=-1.0, ε_center=0.0)
+    end
+
+    @testset "own residuals and scales" begin
+        Random.seed!(13); T = 5000
+        f = randn(T, 2)
+        sector = ["A", "A", "B", "B"]
+        E = hcat([[0.8, 1.0, 0.9, 1.1][i] .* f[:, sector[i] == "A" ? 1 : 2] .+ 0.5 .* randn(T) for i in 1:4]...)
+        sf = JumpHMM.sector_factors(E, sector)
+        δ = JumpHMM.sector_loadings(E, sector)
+        idx = [findfirst(==(s), sf.sectors) for s in sector]
+        U = JumpHMM.own_residuals(E, sf.F, δ, idx)
+        @test U[:, 3] ≈ E[:, 3] .- δ[3] .* sf.F[:, 2]
+        ψ = JumpHMM.own_scales(E, sf.F, U, δ, idx; tickers=["a1", "a2", "b1", "b2"])
+        # the sector and own terms together carry the single-index residual variance
+        for i in 1:4
+            @test δ[i]^2 * var(sf.F[:, idx[i]]) + ψ[i]^2 * var(U[:, i]) ≈ var(E[:, i])
+        end
+        # a sector term that carries more than the residual variance throws and names the ticker
+        err = try
+            JumpHMM.own_scales(E, sf.F, U, 10 .* δ, idx; tickers=["a1", "a2", "b1", "b2"]); nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError && occursin("a1", err.msg)
     end
 
     @testset "fit SectorFactorModel" begin
@@ -78,7 +92,13 @@ include(joinpath(@__DIR__, "fixtures", "sector_factor_v020.jl"))   # 0.2.0 draws
         @test all(isapprox.(model.β, [0.8, 1.0, 1.2, 0.9, 1.1, 1.3]; atol=0.1))
         @test model.β_scale == zeros(6) && sort(collect(keys(marginals))) == sort(model.tickers)
         @test length(model.sector_models) == 2 && size(model.sector_levels, 2) == 2
-        @test length(model.name_models) == 6
+        @test length(model.own_models) == 6 && size(model.own_levels) == (size(prices, 1), 6)
+        # each own model's series is the compounded residual after the sector term
+        Gt = JumpHMM.excess_growth_rates(prices; rf=0.0)
+        X = hcat(ones(size(Gt, 1)), Gt[:, 1])
+        E = hcat([Gt[:, j] .- X * (X \ Gt[:, j]) for j in 2:7]...)
+        U = JumpHMM.own_residuals(E, JumpHMM.sector_factors(E, sector).F, model.δ, model.sector_index)
+        @test model.own_levels ≈ 100.0 .* exp.(vcat(zeros(1, 6), cumsum(U ./ 252; dims=1)))
         # intercept pull 0 sets every α to the universe mean
         m0, _ = fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, center_steps=20_000, intercept_pull=0.0)
         @test all(m0.α .≈ mean(m0.α))
@@ -109,19 +129,24 @@ include(joinpath(@__DIR__, "fixtures", "sector_factor_v020.jl"))   # 0.2.0 draws
         d = JumpHMM.sample_dependence(pf.dependence, 20_000; seed=9)
         C = cor(d.G)
         @test mean([C[1, 2], C[1, 3], C[2, 3]]) > mean([C[i, j] for i in 1:3 for j in 4:6]) + 0.05
-        # variance target on a long path (fixed β, unclipped names)
-        @test all(isapprox.(vec(var(d.G; dims=1)), pf.dependence.σ²_gen; rtol=0.15))
+        # each name keeps its real variance on a long path (fixed β)
+        G_real = JumpHMM.excess_growth_rates(prices; rf=0.0)[:, 2:7]
+        @test all(isapprox.(vec(var(d.G; dims=1)), vec(var(G_real; dims=1)); rtol=0.15))
         # a drifting β changes the composed β path day by day
         pd = fit(PortfolioModel, tickers, prices; dependence=SectorFactorModel, market="MKT", sectors=sector,
                  N=10, sector_options=(center_steps=20_000, β_scale=fill(0.3, 6)))
         dd = JumpHMM.sample_dependence(pd.dependence, 500; seed=9)
-        @test std(dd.β_eff[:, 1]) > 0 && length(unique(d.β_eff[:, 1])) == 1
-        # review focus 5: tune touches market, sectors, names
+        @test std(dd.β_path[:, 1]) > 0 && length(unique(d.β_path[:, 1])) == 1
+        # review focus 5: tune touches market, sectors, own models
         pt = tune(pf, prices; ϵ_range=range(1e-4, 1e-2, length=2), λ_range=range(10.0, 20.0, length=2), n_paths=4)
         @test pt.dependence isa SectorFactorModel && length(pt.dependence.sector_models) == 2
         @test pt.dependence.market_model.jump.ϵ > 0
         @test all(m.jump.ϵ > 0 for m in pt.dependence.sector_models)
         @test all(pt.marginals[t].jump.ϵ > 0 for t in pt.tickers)
+        @test all(pt.marginals[t] === pt.dependence.own_models[i] for (i, t) in enumerate(pt.dependence.tickers))
+        # validate checks each own model on its residual series
+        reports = validate(pf, prices; n_paths=5)
+        @test sort(collect(keys(reports))) == sort(pf.tickers)
         @test_throws ArgumentError fit(PortfolioModel, tickers, prices; dependence=SectorFactorModel, market="MKT", N=10)
     end
 
@@ -137,13 +162,6 @@ include(joinpath(@__DIR__, "fixtures", "sector_factor_v020.jl"))   # 0.2.0 draws
         # 2: seed range guard (stream offsets assume 0 ≤ seed < 10^8)
         @test_throws ArgumentError JumpHMM.sample_dependence(dep, 10; seed=10^8)
         @test_throws ArgumentError JumpHMM.sample_dependence(dep, 10; seed=-1)
-        # 3: clipping is reported per name
-        d = JumpHMM.sample_dependence(dep, 100; seed=3)
-        @test d.n_clipped == zeros(Int, 6)
-        vals = [f === :β ? vcat(10.0, dep.β[2:end]) : getfield(dep, f) for f in fieldnames(SectorFactorModel)]
-        big = SectorFactorModel(vals...)
-        dbig = JumpHMM.sample_dependence(big, 100; seed=3)
-        @test dbig.n_clipped[1] == 100 && all(dbig.n_clipped[2:end] .== 0)
     end
 
     @testset "codex audit fixes" begin
@@ -153,11 +171,11 @@ include(joinpath(@__DIR__, "fixtures", "sector_factor_v020.jl"))   # 0.2.0 draws
         dep = pf.dependence
         # centering draws use seeds far from any path seed (reference: 4·10^12 + j)
         @test dep.center_seed == 4 * 10^12 && dep.center_steps == 20_000
-        # tune recomputes each name's noise center from the tuned model
+        # tune recomputes each name's noise center from its tuned own model
         pt = tune(pf, prices; ϵ_range=range(5e-3, 1e-2, length=2), λ_range=range(10.0, 20.0, length=2), n_paths=4)
         dt = pt.dependence
         for i in eachindex(dt.tickers)
-            expected = mean(simulate(dt.name_models[i], dt.center_steps; n_paths=1, seed=dt.center_seed + i).paths[1].observations)
+            expected = mean(simulate(dt.own_models[i], dt.center_steps; n_paths=1, seed=dt.center_seed + i).paths[1].observations)
             @test dt.ε_center[i] ≈ expected
         end
         # a name's jump flags mark days any of its components (market, sector, own) was in a jump episode
@@ -169,38 +187,34 @@ include(joinpath(@__DIR__, "fixtures", "sector_factor_v020.jl"))   # 0.2.0 draws
         @test r.results["A1"].paths[1].jumps !== r.results["MKT"].paths[1].jumps
     end
 
-    @testset "0.3.0: draws, compose, parameters, given models" begin
+    @testset "draws, compose, parameters, given models" begin
         tickers, prices, sector = sector_universe()
         m, _ = fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, center_steps=20_000,
                    β_scale=fill(0.3, 6), intercept_pull=0.6)
-        # (a) sample_dependence is unchanged from 0.2.0
         d = JumpHMM.sample_dependence(m, 60; seed=7)
-        # floats to rounding: Pkg.test's bounds checking changes summation order (differences near 1e-14)
-        @test isapprox(d.g_m, V020_g_m; atol=1e-10) && isapprox(d.F, V020_F; atol=1e-10)
-        @test isapprox(d.G, V020_G; atol=1e-10) && isapprox(d.β_eff, V020_β_eff; atol=1e-10)
-        @test d.n_clipped == V020_n_clipped && d.jumps == V020_jumps && d.name_jumps == V020_name_jumps
+        @test d == JumpHMM.sample_dependence(m, 60; seed=7)
         # (b) compose(sample_draws) reproduces sample_dependence
         draws = JumpHMM.sample_draws(m, 60; seed=7)
         c = JumpHMM.compose(m, draws)
-        @test c.G == d.G && c.β_eff == d.β_eff && c.n_clipped == d.n_clipped && c.name_jumps == d.name_jumps
+        @test c.G == d.G && c.β_path == d.β_path && c.name_jumps == d.name_jumps
         @test draws.g_m == d.g_m && draws.F == d.F && size(draws.E) == (60, 6) && size(draws.Z) == (60, 6)
         # (c) with_parameters: fixed β composes as a model fitted with fixed β; α and half-life are stored
         m_fixed, _ = fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, center_steps=20_000, intercept_pull=0.6)
         w = JumpHMM.with_parameters(m; β_scale=zeros(6))
         @test JumpHMM.compose(w, draws).G == JumpHMM.compose(m_fixed, JumpHMM.sample_draws(m_fixed, 60; seed=7)).G
         w2 = JumpHMM.with_parameters(m; α=fill(0.05, 6), β_halflife=63.0)
-        @test w2.α == fill(0.05, 6) && w2.β_halflife == 63.0 && w2.β_scale == m.β_scale && w2.name_models === m.name_models
+        @test w2.α == fill(0.05, 6) && w2.β_halflife == 63.0 && w2.β_scale == m.β_scale && w2.own_models === m.own_models
         @test JumpHMM.compose(w2, draws).G != c.G
         @test_throws ArgumentError JumpHMM.with_parameters(m; α=zeros(5))
         @test_throws ArgumentError JumpHMM.with_parameters(m; β_scale=zeros(7))
         @test_throws ArgumentError JumpHMM.with_parameters(m; β_halflife=0.0)
-        # (d) given models replace the fitted ones, and the noise centers use the given name models
-        given = [fit(JumpHiddenMarkovModel, prices[:, j]; N=6) for j in 2:7]
+        # (d) given models replace the fitted ones, and the noise centers use the given own models
+        given = [fit(JumpHiddenMarkovModel, m.own_levels[:, j]; N=6) for j in 1:6]
         mkt = fit(JumpHiddenMarkovModel, prices[:, 1]; N=6)
         sec = m.sector_models
         g, marg = fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, center_steps=20_000,
-                      name_models=given, market_model=mkt, sector_models=sec)
-        @test all(g.name_models[i] === given[i] for i in 1:6) && g.market_model === mkt
+                      own_models=given, market_model=mkt, sector_models=sec)
+        @test all(g.own_models[i] === given[i] for i in 1:6) && g.market_model === mkt
         @test all(g.sector_models[s] === sec[s] for s in 1:2) && marg["A1"] === given[1]
         for i in 1:6
             @test g.ε_center[i] ≈ mean(simulate(given[i], 20_000; n_paths=1, seed=g.center_seed + i).paths[1].observations)
@@ -208,13 +222,13 @@ include(joinpath(@__DIR__, "fixtures", "sector_factor_v020.jl"))   # 0.2.0 draws
         # (f) one name at a time: the same columns as compose, and per-name parameter overrides
         for j in (1, 4)
             one = JumpHMM.compose_name(m, draws, j)
-            @test one.g == c.G[:, j] && one.β_eff == c.β_eff[:, j] && one.n_clipped == c.n_clipped[j]
+            @test one.g == c.G[:, j] && one.β_path == c.β_path[:, j]
         end
         w3 = JumpHMM.with_parameters(m; α=fill(0.07, 6), β_halflife=252.0, β_scale=fill(1.1, 6))
         @test JumpHMM.compose_name(m, draws, 2; α=0.07, β_halflife=252.0, β_scale=1.1).g == JumpHMM.compose(w3, draws).G[:, 2]
         @test_throws ArgumentError JumpHMM.compose_name(m, draws, 7)
         # (e) wrong lengths throw
-        @test_throws ArgumentError fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, name_models=given[1:5])
+        @test_throws ArgumentError fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, own_models=given[1:5])
         @test_throws ArgumentError fit(SectorFactorModel, tickers, prices, "MKT", sector; N=10, sector_models=sec[1:1])
     end
 

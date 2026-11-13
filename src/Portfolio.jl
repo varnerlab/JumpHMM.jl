@@ -91,7 +91,9 @@ Tune jump parameters for each marginal model. Returns a new PortfolioModel.
 
 By default, uses the column mapping stored in `portfolio.tickers_map` (set during `fit`).
 For `SingleIndexModel` portfolios, the market model is also tuned automatically using
-the stored market ticker mapping.
+the stored market ticker mapping. For `SectorFactorModel` portfolios, the market model is tuned on the
+market's prices, each sector model on its compounded sector factor, and each own model on its compounded
+residual after the sector term.
 """
 function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
               tickers_map::Union{Dict{String,Int},Nothing}=nothing,
@@ -101,11 +103,13 @@ function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
     # use stored mapping by default
     col_map = tickers_map !== nothing ? tickers_map : portfolio.tickers_map
 
-    # tune each marginal
+    # tune each marginal (a SectorFactorModel's own models are tuned on their residual series below)
     tuned_marginals = Dict{String,JumpHiddenMarkovModel}()
-    for (ticker, model) in portfolio.marginals
-        col = col_map[ticker]
-        tuned_marginals[ticker] = tune(model, prices[:, col]; kwargs...)
+    if !(portfolio.dependence isa SectorFactorModel)
+        for (ticker, model) in portfolio.marginals
+            col = col_map[ticker]
+            tuned_marginals[ticker] = tune(model, prices[:, col]; kwargs...)
+        end
     end
 
     # tune market model if SIM or HybridSIM
@@ -154,15 +158,16 @@ function tune(portfolio::PortfolioModel, prices::AbstractMatrix{<:Real};
         market_tuned = (mcol !== nothing) ? tune(dep.market_model, prices[:, mcol]; kwargs...) : dep.market_model
         sectors_tuned = [tune(dep.sector_models[s], dep.sector_levels[:, s]; kwargs...)
                          for s in eachindex(dep.sector_models)]
-        names_tuned = [tuned_marginals[t] for t in dep.tickers]
-        # tuning changes each name model's long-run mean, so recompute the noise centers (as the reference does,
-        # which centers after tuning)
-        centers = [mean(simulate(names_tuned[i], dep.center_steps; n_paths=1, seed=dep.center_seed + i).paths[1].observations)
+        own_tuned = [tune(dep.own_models[i], dep.own_levels[:, i]; kwargs...) for i in eachindex(dep.tickers)]
+        for (i, t) in enumerate(dep.tickers)
+            tuned_marginals[t] = own_tuned[i]
+        end
+        # tuning changes each own model's long-run mean, so recompute the noise centers
+        centers = [mean(simulate(own_tuned[i], dep.center_steps; n_paths=1, seed=dep.center_seed + i).paths[1].observations)
                    for i in eachindex(dep.tickers)]
         dep = SectorFactorModel(dep.tickers, dep.sector, dep.sectors, dep.sector_index, dep.α, dep.β, dep.δ,
-                                dep.r², dep.σ²_m, dep.σ²_s, dep.σ²_gen, centers, dep.β_halflife,
-                                dep.β_scale, dep.floor, dep.r2_threshold, market_tuned, sectors_tuned,
-                                names_tuned, dep.sector_levels, dep.center_steps, dep.center_seed)
+                                dep.r², dep.ψ, centers, dep.β_halflife, dep.β_scale, market_tuned, sectors_tuned,
+                                own_tuned, dep.sector_levels, dep.own_levels, dep.center_steps, dep.center_seed)
     end
 
     return PortfolioModel(portfolio.tickers, tuned_marginals, dep,
@@ -291,6 +296,14 @@ function validate(portfolio::PortfolioModel,
     col_map = tickers_map !== nothing ? tickers_map : portfolio.tickers_map
 
     reports = Dict{String,ValidationReport}()
+    dep = portfolio.dependence
+    if dep isa SectorFactorModel
+        # each own model describes the name's residual after its sector term, so it is checked on that series
+        for (i, ticker) in enumerate(dep.tickers)
+            reports[ticker] = validate(dep.own_models[i], dep.own_levels[:, i]; kwargs...)
+        end
+        return reports
+    end
     for (ticker, model) in portfolio.marginals
         col = col_map[ticker]
         reports[ticker] = validate(model, prices[:, col]; kwargs...)

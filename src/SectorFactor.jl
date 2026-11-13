@@ -1,10 +1,12 @@
 # --- Sector factor model ----------------------------------------------------
 #
-# Multi-asset composition from the INFORMS 2026 study (Varner, arXiv:2611.03022):
-#   g_i(t) = α_i + β_i(t)·g_m(t) + δ_i·f_s(t) + s_i·ε̃_i(t)
-# where g_m is one draw of the market model, f_s one draw of the model of name i's sector,
-# and ε̃_i one draw of name i's own model. Names are linked only through the shared market
-# and sector draws on the same day; there is no copula.
+# Multi-asset composition of a synthetic stock universe:
+#   g_i(t) = α_i + β_i(t)·g_m(t) + δ_i·f_s(t) + ψ_i·ε̃_i(t)
+# where g_m is one draw of the market model, f_s one draw of the model of name i's sector factor
+# (the mean single-index residual of its sector), and ε̃_i one draw of the model of name i's residual
+# after its sector term, centered on that model's long-run mean. ψ_i sizes the own draw so the sector
+# and own terms carry the name's single-index residual variance. Names are linked only through the
+# shared market and sector draws on the same day; there is no copula.
 
 """
     ema_rate(h) → Float64
@@ -123,82 +125,94 @@ function sector_loadings(E::AbstractMatrix, sector::Vector{String})::Vector{Floa
 end
 
 """
-    compose_name(α, β, δ, g_m, f, ε, σ²_m, σ²_s, σ²_gen, r²; ε_center, β²_mean,
-                 floor=0.10, r2_threshold=0.80) → (g, β_eff, n_clipped)
+    compose_name(α, β, δ, g_m, f, ε; ψ, ε_center) → (g, β_path)
 
-Compose one name's daily growth `g[t] = α[t] + c·β[t]·g_m[t] + c·δ·f[t] + √s²·(ε[t] − ε_center)`.
-`α` and `β` are per-day paths, `δ` the sector loading, and `g_m`, `f`, `ε` the market, sector, and own
-draws. `σ²_m`, `σ²_s`, `σ²_gen` are the fixed variances of the market growth, the sector factor, and the
-name's own growth; `r²` is the name's real single-index R²; `β²_mean` is the long-run mean of `β[t]²`.
-
-The variance split is fixed for the whole path: `v̄ = β²_mean·σ²_m + δ²·σ²_s` and `ρ̄ = v̄/σ²_gen`.
-If `r² ≥ r2_threshold`, `s² = v̄(1 − r²)/r²/σ²_gen` and `c = 1` (keep the real R²). Otherwise, if
-`ρ̄ ≤ 1 − floor`, `s² = 1 − ρ̄` and `c = 1` (match the name's variance). Otherwise both loadings shrink
-by `c = √((1 − floor)/ρ̄)`, `s² = floor`, and every day counts as clipped.
-Returns the growth path `g`, the per-day `β_eff = c·β`, and `n_clipped` (0 or the path length).
+Compose one name's daily growth `g[t] = α[t] + β[t]·g_m[t] + δ·f[t] + ψ·(ε[t] − ε_center)`.
+`α` and `β` are per-day paths (yr⁻¹ and 1), `δ` the sector loading, and `g_m`, `f`, `ε` the market,
+sector, and own draws (yr⁻¹). The own draw comes from the model of the name's residual after its sector
+term; `ε_center` is that model's long-run mean (yr⁻¹) and `ψ` the scale of the own draw (`own_scales`).
+Returns the growth path `g` and the per-day β path `β_path`.
 """
 function compose_name(α::AbstractVector, β::AbstractVector, δ::Real, g_m::AbstractVector,
-                      f::AbstractVector, ε::AbstractVector, σ²_m::Real, σ²_s::Real, σ²_gen::Real,
-                      r²::Real; ε_center::Real, β²_mean::Real, floor::Real=0.10,
-                      r2_threshold::Real=0.80)
+                      f::AbstractVector, ε::AbstractVector; ψ::Real, ε_center::Real)
     T = length(g_m)
     (length(α) == T && length(β) == T && length(f) == T && length(ε) == T) ||
         throw(ArgumentError("α, β, g_m, f and ε must share one length; got $(length(α)), $(length(β)), $(T), $(length(f)), $(length(ε))"))
-    0 < floor < 1 || throw(ArgumentError("floor must lie in (0, 1); got $(floor)"))
-    σ²_gen > 0 || throw(ArgumentError("σ²_gen must be positive; got $(σ²_gen)"))
-    r² > 0 || throw(ArgumentError("r² must be positive; got $(r²)"))
-    β²_mean >= 0 || throw(ArgumentError("β²_mean must be non-negative; got $(β²_mean)"))
-    v̄ = β²_mean * σ²_m + δ^2 * σ²_s
-    ρ̄ = v̄ / σ²_gen
-    c = 1.0
-    n_clipped = 0
-    if r² >= r2_threshold
-        s² = v̄ * (1 - r²) / r² / σ²_gen
-    elseif ρ̄ <= 1 - floor
-        s² = 1 - ρ̄
-    else
-        c = sqrt((1 - floor) / ρ̄)
-        s² = floor
-        n_clipped = T
-    end
-    β_eff = c .* β
-    g = α .+ β_eff .* g_m .+ (c * δ) .* f .+ sqrt(s²) .* (ε .- ε_center)
-    return (g=collect(Float64, g), β_eff=collect(Float64, β_eff), n_clipped=n_clipped)
+    ψ >= 0 || throw(ArgumentError("ψ must be non-negative; got $(ψ)"))
+    g = α .+ β .* g_m .+ δ .* f .+ ψ .* (ε .- ε_center)
+    return (g=collect(Float64, g), β_path=collect(Float64, β))
 end
 
 """
-    fit(::Type{SectorFactorModel}, tickers, prices, market, sector; kwargs...) → (model, marginals)
+    own_residuals(E, F, δ, sector_index) → Matrix{Float64}
+
+The residual each name has left after its sector term: column `i` is `E[:, i] − δ[i]·F[:, sector_index[i]]`,
+where `E` (days × names) holds the single-index residuals and `F` (days × sectors) the sector factors.
+Each name's own model is fit to this series.
+"""
+function own_residuals(E::AbstractMatrix, F::AbstractMatrix, δ::AbstractVector, sector_index::Vector{Int})::Matrix{Float64}
+    (size(E, 2) == length(δ) == length(sector_index)) ||
+        throw(ArgumentError("E has $(size(E, 2)) columns, δ $(length(δ)) entries and sector_index $(length(sector_index))"))
+    U = zeros(Float64, size(E))
+    for i in 1:size(E, 2)
+        U[:, i] = E[:, i] .- δ[i] .* F[:, sector_index[i]]
+    end
+    return U
+end
+
+"""
+    own_scales(E, F, U, δ, sector_index; tickers) → Vector{Float64}
+
+Scale `ψᵢ` of each name's own draw. The sector and own terms together carry the variance of the name's
+single-index residual: `ψᵢ² = (var(Eᵢ) − δᵢ²·var(F_s)) / var(Uᵢ)`, where `U = own_residuals(E, F, δ, sector_index)`.
+`ψᵢ` differs from 1 when part of `Uᵢ` still moves with the sector factor, which happens because the sector factor
+averages the residuals of its names, name `i` included; with many names per sector, `ψᵢ` is close to 1. Throws `ArgumentError` (naming the ticker) when the
+sector term alone carries the whole residual variance.
+"""
+function own_scales(E::AbstractMatrix, F::AbstractMatrix, U::AbstractMatrix, δ::AbstractVector,
+                    sector_index::Vector{Int}; tickers::Vector{String})::Vector{Float64}
+    ψ = zeros(Float64, size(E, 2))
+    for i in 1:size(E, 2)
+        own_variance = var(view(E, :, i)) - δ[i]^2 * var(view(F, :, sector_index[i]))
+        own_variance > 0 ||
+            throw(ArgumentError("name $(tickers[i]): the sector term carries the whole residual variance (left over: $(own_variance))"))
+        ψ[i] = sqrt(own_variance / var(view(U, :, i)))
+    end
+    return ψ
+end
+
+"""
+    fit(::Type{SectorFactorModel}, tickers, prices, market, sector; kwargs...) → (model, own)
 
 Fit a `SectorFactorModel`. `tickers` and the columns of `prices` include the market ticker `market`;
 `sector` holds one label per non-market ticker, in the order those tickers appear in `tickers`.
 Every sector needs at least two names.
 
 Steps: growth rates `G = excess_growth_rates(prices; rf, dt)`; single-index OLS of each name on the
-market → `α̂`, `β̂`, `r²`, residuals `E`; `sector_factors` and `sector_loadings` of `E`; intercepts
-`α = ᾱ + intercept_pull·(α̂ − ᾱ)`; a Jump-HMM for the market (its prices), for each name (its prices),
-and for each sector (the compounded sector factor, `100·exp(cumsum(F·dt))`, fit with `rf = 0`).
-Variance targets are the real variances. `ε_center[i]` is the mean of one `center_steps`-day draw of
-name model `i` seeded with `center_seed + i`.
+market → `α̂`, `β̂`, `r²`, residuals `E`; `sector_factors` and `sector_loadings` of `E`; each name's residual
+after its sector term (`own_residuals`) and the scale of its own draw (`own_scales`); intercepts
+`α = ᾱ + intercept_pull·(α̂ − ᾱ)`; a Jump-HMM for the market (its prices), for each sector (the compounded
+sector factor, `100·exp(cumsum(F·dt))`), and for each name's own residual (compounded the same way). The
+sector and own models are fit with `rf = 0`. `ε_center[i]` is the mean of one `center_steps`-day draw of
+own model `i` seeded with `center_seed + i`.
 
 Keywords: `rf=0.0`, `N=100`, `ν=5.0`, `dt=1/252`, `min_obs=2` (as for `JumpHiddenMarkovModel`);
 `intercept_pull=1.0` (1 keeps `α̂`, 0 sets every α to the mean); `β_halflife=126.0` (trading days);
-`β_scale=nothing` (zeros: fixed β); `floor=0.10`; `r2_threshold=0.80`; `center_steps=1_000_000`;
-`center_seed=4·10^12` (far from every path seed, as in the reference).
-`market_model`, `name_models` (one per name, in name order) and `sector_models` (one per sector, in
+`β_scale=nothing` (zeros: fixed β); `center_steps=1_000_000`; `center_seed=4·10^12` (far from every path seed).
+`market_model`, `own_models` (one per name, in name order) and `sector_models` (one per sector, in
 sorted-label order) replace the models `fit` would fit, for a caller that fits or tunes them its own
-way; `ε_center` always comes from the name models actually stored. A wrong length throws `ArgumentError`.
+way; `ε_center` always comes from the own models actually stored. A wrong length throws `ArgumentError`.
 
-Returns the model and a `Dict` of the name models keyed by ticker.
+Returns the model and a `Dict` of the own models keyed by ticker.
 """
 function fit(::Type{SectorFactorModel}, tickers::Vector{String}, prices::AbstractMatrix{<:Real},
              market::String, sector::Vector{String};
              rf::Float64=0.0, N::Int=100, ν::Float64=5.0, dt::Float64=1/252, min_obs::Int=2,
              intercept_pull::Float64=1.0, β_halflife::Float64=126.0,
              β_scale::Union{Nothing,Vector{Float64}}=nothing,
-             floor::Float64=0.10, r2_threshold::Float64=0.80,
              center_steps::Int=1_000_000, center_seed::Int=4 * 10^12,
              market_model::Union{Nothing,JumpHiddenMarkovModel}=nothing,
-             name_models::Union{Nothing,AbstractVector{<:JumpHiddenMarkovModel}}=nothing,
+             own_models::Union{Nothing,AbstractVector{<:JumpHiddenMarkovModel}}=nothing,
              sector_models::Union{Nothing,AbstractVector{<:JumpHiddenMarkovModel}}=nothing)
 
     size(prices, 2) == length(tickers) ||
@@ -229,47 +243,50 @@ function fit(::Type{SectorFactorModel}, tickers::Vector{String}, prices::Abstrac
     δ = sector_loadings(E, sector)
     sector_index = [findfirst(==(s), sf.sectors) for s in sector]
 
+    # each name's residual after its sector term, and the scale of its own draw
+    U = own_residuals(E, sf.F, δ, sector_index)
+    ψ = own_scales(E, sf.F, U, δ, sector_index; tickers=names)
+
     # intercepts, optionally pulled toward the universe mean
     ᾱ = mean(α̂)
     α = ᾱ .+ intercept_pull .* (α̂ .- ᾱ)
 
-    # Jump-HMMs: market, names, sectors; a model given by the caller replaces the one fitted here
-    name_models === nothing || length(name_models) == length(names) ||
-        throw(ArgumentError("name_models has $(length(name_models)) models but there are $(length(names)) names"))
+    # Jump-HMMs: market, sectors, own residuals; a model given by the caller replaces the one fitted here
+    own_models === nothing || length(own_models) == length(names) ||
+        throw(ArgumentError("own_models has $(length(own_models)) models but there are $(length(names)) names"))
     sector_models === nothing || length(sector_models) == length(sf.sectors) ||
         throw(ArgumentError("sector_models has $(length(sector_models)) models but there are $(length(sf.sectors)) sectors"))
     market_model = market_model !== nothing ? market_model :
         fit(JumpHiddenMarkovModel, prices[:, m]; rf=rf, N=N, ν=ν, dt=dt, min_obs=min_obs)
-    name_models = name_models !== nothing ? collect(JumpHiddenMarkovModel, name_models) :
-        [fit(JumpHiddenMarkovModel, prices[:, j]; rf=rf, N=N, ν=ν, dt=dt, min_obs=min_obs) for j in names_idx]
     sector_levels = 100.0 .* exp.(vcat(zeros(1, size(sf.F, 2)), cumsum(sf.F .* dt; dims=1)))
     sector_models = sector_models !== nothing ? collect(JumpHiddenMarkovModel, sector_models) :
         [fit(JumpHiddenMarkovModel, sector_levels[:, s]; rf=0.0, N=N, ν=ν, dt=dt, min_obs=min_obs)
          for s in eachindex(sf.sectors)]
+    own_levels = 100.0 .* exp.(vcat(zeros(1, size(U, 2)), cumsum(U .* dt; dims=1)))
+    own_models = own_models !== nothing ? collect(JumpHiddenMarkovModel, own_models) :
+        [fit(JumpHiddenMarkovModel, own_levels[:, i]; rf=0.0, N=N, ν=ν, dt=dt, min_obs=min_obs)
+         for i in eachindex(names)]
 
-    # variance targets and the long-run mean of each name model
-    σ²_m = var(g_m)
-    σ²_s = vec(var(sf.F; dims=1))
-    σ²_gen = vec(var(G; dims=1))
-    ε_center = [mean(simulate(name_models[i], center_steps; n_paths=1, seed=center_seed + i).paths[1].observations)
+    # the long-run mean of each own model
+    ε_center = [mean(simulate(own_models[i], center_steps; n_paths=1, seed=center_seed + i).paths[1].observations)
                 for i in eachindex(names)]
 
     scale = β_scale === nothing ? zeros(length(names)) : β_scale
     length(scale) == length(names) ||
         throw(ArgumentError("β_scale has $(length(scale)) entries but there are $(length(names)) names"))
 
-    model = SectorFactorModel(names, sector, sf.sectors, sector_index, α, β̂, δ, r², σ²_m, σ²_s, σ²_gen,
-                              ε_center, β_halflife, scale, floor, r2_threshold, market_model,
-                              sector_models, name_models, sector_levels, center_steps, center_seed)
-    marginals = Dict{String,JumpHiddenMarkovModel}(names[i] => name_models[i] for i in eachindex(names))
-    return (model, marginals)
+    model = SectorFactorModel(names, sector, sf.sectors, sector_index, α, β̂, δ, r², ψ, ε_center,
+                              β_halflife, scale, market_model, sector_models, own_models,
+                              sector_levels, own_levels, center_steps, center_seed)
+    own = Dict{String,JumpHiddenMarkovModel}(names[i] => own_models[i] for i in eachindex(names))
+    return (model, own)
 end
 
 """
     sample_draws(model::SectorFactorModel, n; seed) → (g_m, m_states, jumps, F, sector_jumps, E, own_jumps, Z)
 
 Every random component of one `n`-day path, before composition: the market draw (`g_m`, `m_states`,
-`jumps`), one draw of each sector model (`F`, n × sectors, and `sector_jumps`), one draw of each name
+`jumps`), one draw of each sector model (`F`, n × sectors, and `sector_jumps`), one draw of each own
 model (`E`, n × names, and `own_jumps`), and the standard normal β-drift shocks `Z` (n × names).
 Seeds: market `seed`; sector `s` `10^12 + 10^4·seed + s`; name `j` `2·10^12 + 10^4·seed + j`; β-drift
 shocks from `Xoshiro(3·10^12 + seed)`. The streams stay distinct for `0 ≤ seed < 10^8` and fewer than
@@ -299,7 +316,7 @@ function sample_draws(model::SectorFactorModel, n::Int; seed::Int)
     E = zeros(Float64, n, N)
     own_jumps = falses(n, N)
     for j in 1:N
-        own = simulate(model.name_models[j], n; n_paths=1, seed=2 * 10^12 + 10^4 * seed + j).paths[1]
+        own = simulate(model.own_models[j], n; n_paths=1, seed=2 * 10^12 + 10^4 * seed + j).paths[1]
         E[:, j] = own.observations
         own_jumps[:, j] = own.jumps
     end
@@ -308,36 +325,33 @@ function sample_draws(model::SectorFactorModel, n::Int; seed::Int)
 end
 
 """
-    compose(model::SectorFactorModel, draws) → (G, β_eff, n_clipped, name_jumps)
+    compose(model::SectorFactorModel, draws) → (G, β_path, name_jumps)
 
 Compose the name growth rates of one path from its `draws` (`sample_draws`) with the model's α, β,
-β drift (`β_halflife`, `β_scale`), loadings and variance targets: `G` (n × names, yr⁻¹), `β_eff` (each
-name's per-day β after any clipping), `n_clipped` (one per name, 0 or n, see `compose_name`) and
-`name_jumps` (days any of a name's components, market, sector or own, was in a jump episode).
-Deterministic: the same draws and model give the same output.
+β drift (`β_halflife`, `β_scale`), sector loadings, and own scales: `G` (n × names, yr⁻¹), `β_path` (each
+name's per-day β) and `name_jumps` (days any of a name's components, market, sector or own, was in a
+jump episode). Deterministic: the same draws and model give the same output.
 """
 function compose(model::SectorFactorModel, draws)
     n, N = size(draws.E)
     N == length(model.tickers) ||
         throw(ArgumentError("draws have $(N) names but the model has $(length(model.tickers))"))
     G = zeros(Float64, n, N)
-    β_eff = zeros(Float64, n, N)
-    n_clipped = zeros(Int, N)
+    β_path = zeros(Float64, n, N)
     name_jumps = falses(n, N)
     for j in 1:N
         out = compose_name(model, draws, j)
         s = model.sector_index[j]
         G[:, j] = out.g
-        β_eff[:, j] = out.β_eff
-        n_clipped[j] = out.n_clipped
+        β_path[:, j] = out.β_path
         name_jumps[:, j] = draws.jumps .| view(draws.sector_jumps, :, s) .| view(draws.own_jumps, :, j)
     end
-    return (G=G, β_eff=β_eff, n_clipped=n_clipped, name_jumps=name_jumps)
+    return (G=G, β_path=β_path, name_jumps=name_jumps)
 end
 
 """
     compose_name(model::SectorFactorModel, draws, j::Int; α=nothing, β_halflife=model.β_halflife,
-        β_scale=nothing) → (g, β_eff, n_clipped)
+        β_scale=nothing) → (g, β_path)
 
 Compose name `j` alone from `draws` (`sample_draws`): column `j` of `compose(model, draws)`, computed
 without composing the other names. The keywords override name `j`'s intercept (yr⁻¹), the β-drift
@@ -355,11 +369,8 @@ function compose_name(model::SectorFactorModel, draws, j::Int; α::Union{Nothing
     n = length(draws.g_m)
     s = model.sector_index[j]
     β = model.β[j] .+ drift_path(view(draws.Z, :, j), β_halflife, β_scale)
-    return compose_name(fill(Float64(α), n), β, model.δ[j], draws.g_m, view(draws.F, :, s), view(draws.E, :, j),
-                        model.σ²_m, model.σ²_s[s], model.σ²_gen[j], model.r²[j];
-                        ε_center=model.ε_center[j],
-                        β²_mean=model.β[j]^2 + drift_variance(β_halflife, β_scale),
-                        floor=model.floor, r2_threshold=model.r2_threshold)
+    return compose_name(fill(Float64(α), n), β, model.δ[j], draws.g_m, view(draws.F, :, s), view(draws.E, :, j);
+                        ψ=model.ψ[j], ε_center=model.ε_center[j])
 end
 
 """
@@ -385,19 +396,17 @@ function with_parameters(model::SectorFactorModel; α::AbstractVector{<:Real}=mo
 end
 
 """
-    sample_dependence(model::SectorFactorModel, n; seed) → (g_m, m_states, jumps, F, G, β_eff, n_clipped, name_jumps)
+    sample_dependence(model::SectorFactorModel, n; seed) → (g_m, m_states, jumps, F, G, β_path, name_jumps)
 
 Draw one `n`-day synthetic path of the whole universe: `compose(model, sample_draws(model, n; seed))`.
 `g_m`, `m_states`, `jumps` are the market draw (growth, states, jump-episode flags); `F` (n × sectors)
-holds one draw of each sector model; `G` (n × names) the composed name growth; `β_eff` (n × names)
-each name's per-day β after any clipping; `n_clipped` (one per name) the number of days whose loadings
-were shrunk (0 or `n`, see `compose_name`); `name_jumps` (n × names) marks the days any of a name's
-components (market, sector, own) was in a jump episode. Seeds as in `sample_draws`; the same `seed`
-reproduces the path exactly, and the output is the same as in version 0.2.0.
+holds one draw of each sector model; `G` (n × names) the composed name growth; `β_path` (n × names)
+each name's per-day β; `name_jumps` (n × names) marks the days any of a name's components (market,
+sector, own) was in a jump episode. Seeds as in `sample_draws`; the same `seed` reproduces the path exactly.
 """
 function sample_dependence(model::SectorFactorModel, n::Int; seed::Int)
     draws = sample_draws(model, n; seed=seed)
     c = compose(model, draws)
-    return (g_m=draws.g_m, m_states=draws.m_states, jumps=draws.jumps, F=draws.F, G=c.G, β_eff=c.β_eff,
-            n_clipped=c.n_clipped, name_jumps=c.name_jumps)
+    return (g_m=draws.g_m, m_states=draws.m_states, jumps=draws.jumps, F=draws.F, G=c.G, β_path=c.β_path,
+            name_jumps=c.name_jumps)
 end

@@ -77,7 +77,7 @@ portfolio = fit(PortfolioModel, tickers, price_matrix;
 portfolio = fit(PortfolioModel, tickers, price_matrix;
     dependence=HybridSingleIndexModel, market="SPY", rf=0.05)
 
-# Sector factor model (market + sector + own Jump-HMMs, no copula)
+# Sector factor model (Jump-HMMs of the market, each sector factor, and each name's residual; no copula)
 portfolio = fit(PortfolioModel, tickers, price_matrix;
     dependence=SectorFactorModel, market="SPY", sectors=sector_labels, rf=0.05)
 ```
