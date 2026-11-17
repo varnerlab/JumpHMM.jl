@@ -15,3 +15,4 @@ include(joinpath(@__DIR__, "Factory.jl"));
 include(joinpath(@__DIR__, "Simulate.jl"));
 include(joinpath(@__DIR__, "Tune.jl"));
 include(joinpath(@__DIR__, "Validate.jl"));
+include(joinpath(@__DIR__, "Decode.jl"));

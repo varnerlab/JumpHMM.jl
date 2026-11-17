@@ -35,4 +35,7 @@ module JumpHMM
 
     # validate a model against the data, and compare two samples -
     export validate, wasserstein_distance, hellinger_distance
+
+    # decode states, filter state probabilities, and compute the log-likelihood -
+    export decode, forward_filter, log_likelihood
 end
