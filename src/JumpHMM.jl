@@ -21,4 +21,9 @@ module JumpHMM
 
     # growth rates -
     export excess_growth_rates, prices_from_growth_rates
+
+    # build and estimate a single-asset model -
+    export build
+    export laplace_boundaries, assign_states, estimate_transition, stationary_distribution
+    export estimate_emissions, sample_emission
 end

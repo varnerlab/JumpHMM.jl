@@ -4,6 +4,9 @@ using Random
 using Statistics
 using LinearAlgebra
 
+# the equivalence tests compare with ==, and `--check-bounds=yes` (the default of Pkg.test) changes the last bit of sums,
+# so run them with: Pkg.test(julia_args = ["--check-bounds=auto"])
+
 # load the frozen 0.4.1 inputs and outputs -
 include(joinpath(@__DIR__, "equivalence", "helpers.jl"));
 inputs = load_inputs();
