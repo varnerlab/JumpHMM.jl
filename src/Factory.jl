@@ -17,7 +17,7 @@ count the moves between states, estimate the emission distribution of each state
 ### Optional Arguments
 The optional keys of `data` and their defaults are:
 - `ϵ::Float64`: The probability that a jump episode starts at a time step, between `0` and `1`. The default is `0.0`, which means no jumps
-- `λ::Float64`: The rate of the Poisson distribution of the length of a jump episode, above `0`. The default is `1.0`
+- `λ::Float64`: The mean of the Poisson episode length, in trading days, above `0`. The default is `1.0`
 - `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail, between `0` and `1`. The default is `0.52`
 - `N_tail::Int64`: The number of states in each tail that a jump episode can reach, at least `1`. The default is `5`
 - `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`

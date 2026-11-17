@@ -4,7 +4,7 @@
 CurrentModule = JumpHMM
 ```
 
-The [`MySectorFactorModel`](@ref) type builds a synthetic universe of many assets from three layers of hidden Markov models: one model of the market, one model of each sector, and one own model of each asset. On day ``t``, the growth rate of asset ``i`` in sector ``s`` is
+The [`MySectorFactorModel`](@ref) type holds a model of many assets, built from three layers of hidden Markov models: one model of the market, one model of each sector, and one own model of each asset. On day ``t``, the growth rate of asset ``i`` in sector ``s`` is
 
 ```math
 g_i(t) = \alpha_i + \beta_i(t)\, g_m(t) + \delta_i\, f_s(t) + \psi_i \left(\varepsilon_i(t) - \bar{\varepsilon}_i\right)
@@ -26,7 +26,7 @@ The [`build`](@ref build(::Type{MySectorFactorModel}, ::NamedTuple)) function fi
 Every sector needs at least two assets, because the loading of an asset uses the other assets in its sector.
 
 ## Intercepts and the drift of β
-By default, the intercept ``\alpha_i`` is the fitted ``\hat{\alpha}_i``, and ``\beta_i(t)`` stays at the fitted ``\beta_i``. Two optional keys change this.
+By default, the intercept ``\alpha_i`` is the fitted ``\hat{\alpha}_i``, and ``\beta_i(t)`` stays at the fitted ``\beta_i``. The optional keys `intercept_pull`, `β_scale`, and `β_halflife` change these defaults.
 
 The key `intercept_pull` moves each intercept toward the mean intercept ``\bar{\alpha}`` of all the assets, ``\alpha_i = \bar{\alpha} + c\,(\hat{\alpha}_i - \bar{\alpha})``, where ``c`` is `intercept_pull`. A value of `1.0`, the default, keeps the fitted intercepts, and `0.0` gives every asset the mean intercept.
 
@@ -47,7 +47,7 @@ The own scale ``\psi_i`` makes the drift of ``\beta_i``, the sector term, and th
 \psi_i^{2} = \frac{\operatorname{Var}(e_i) - \delta_i^{2} \operatorname{Var}(f_s) - \sigma_{x,i}^{2} \operatorname{Var}(g_m)}{\operatorname{Var}(u_i)}
 ```
 
-The residual ``e_i`` comes from a fit with a fixed ``\beta_i``. It already holds the movement of the real ``\beta``. We subtract ``\sigma_{x,i}^{2} \operatorname{Var}(g_m)``, so that a drifting ``\beta_i`` does not add that variance a second time.
+The residual ``e_i`` comes from a fit with a fixed ``\beta_i``. That residual already holds the movement of the stock's actual ``\beta`` over time. We subtract ``\sigma_{x,i}^{2} \operatorname{Var}(g_m)``, so that a drifting ``\beta_i`` does not add that variance a second time.
 
 The sector factor averages the residuals of its assets, asset ``i`` included. As a result, part of ``u_i`` still moves with ``f_s``. Independent draws of the sector model and the own model lose that shared part, and ``\psi_i`` puts that variance back.
 
@@ -78,7 +78,7 @@ path.G                        # the growth rates of the assets (1/year), one row
 
 The build draws one long path of each own model, `center_steps` days long (default `1_000_000`), and takes its mean as ``\bar{\varepsilon}_i``. A smaller `center_steps`, such as `20_000`, builds faster but gives a less precise ``\bar{\varepsilon}_i``.
 
-The keys `market_model`, `sector_models`, and `own_models` store models fitted or tuned elsewhere, instead of the models the build would fit. Each own model must describe the residual of its asset after the sector term, the series that `own_levels` holds. The [`build`](@ref build(::Type{MySectorFactorModel}, ::NamedTuple)) docstring lists every optional key and its default.
+The keys `market_model`, `sector_models`, and `own_models` pass in models fitted or tuned elsewhere, instead of the models the build would fit. Each own model must describe the residual of its asset after the sector term, the series that `own_levels` holds. The [`build`](@ref build(::Type{MySectorFactorModel}, ::NamedTuple)) docstring lists every optional key and its default.
 
 ## Draws and composition
 A path of the universe comes from two steps:
@@ -92,15 +92,15 @@ The [`sample_dependence`](@ref sample_dependence(::MySectorFactorModel, ::Int64)
 |:---|:---|:---|
 | `g_m` | The market growth rates (1/year), one per day | `sample_draws`, `sample_dependence` |
 | `m_states` | The state of the market model on each day | `sample_draws`, `sample_dependence` |
-| `episodes` | `true` on the days of a market jump episode | `sample_draws`, `sample_dependence` |
+| `episodes` | A flag that is `true` on the days of a market jump episode | `sample_draws`, `sample_dependence` |
 | `F` | The sector factors (1/year), one column per sector | `sample_draws`, `sample_dependence` |
-| `sector_episodes` | `true` on the days of a jump episode of each sector model | `sample_draws` |
+| `sector_episodes` | A flag that is `true` on the days of a jump episode of each sector model | `sample_draws` |
 | `E` | The own draws (1/year), one column per asset | `sample_draws` |
-| `own_episodes` | `true` on the days of a jump episode of each own model | `sample_draws` |
+| `own_episodes` | A flag that is `true` on the days of a jump episode of each own model | `sample_draws` |
 | `Z` | The standard normal shocks of the drift of ``\beta``, one column per asset | `sample_draws` |
 | `G` | The growth rates of the assets (1/year), one column per asset | `compose`, `sample_dependence` |
 | `β_path` | The market sensitivity of each asset on each day | `compose`, `sample_dependence` |
-| `name_episodes` | `true` on the days when the market, the sector, or the own draw of an asset is in a jump episode | `compose`, `sample_dependence` |
+| `name_episodes` | A flag that is `true` on the days when the market, the sector, or the own draw of an asset is in a jump episode | `compose`, `sample_dependence` |
 
 Each part of the draw has its own seed, made from `seed`. The same `seed` gives the same path, and `seed` must be an `Int64` from `0` up to, but not including, `10^8`. Like [`simulate`](@ref simulate(::MyJumpHiddenMarkovModel, ::Int64)), the function `sample_draws` reseeds the global random number generator.
 
@@ -128,4 +128,4 @@ end
 The [`compose_name`](@ref compose_name(::MySectorFactorModel, ::NamedTuple, ::Int64)) function composes one asset alone, with its own intercept, half-life, or drift scale for that call. Because `compose` reads only the keys it needs, the `draws` can mix the parts of two draws, for example the market from one draw and the sectors from another.
 
 ## Tuning, simulating, and validating
-To tune the market, sector, and own models, build a [portfolio](portfolio.md) with `dependence = JumpHMM.MySectorFactorModel`. The portfolio also simulates and validates the universe. The portfolio takes the same `sector` key, and it passes the other keys of this build in `sector_options`.
+To tune the market, sector, and own models, build a [portfolio](portfolio.md) with `dependence = JumpHMM.MySectorFactorModel`. The portfolio also simulates the universe, and it validates each own model against the residual series it was fit to. The portfolio takes the same `sector` key, and it takes the other keys of this build in `sector_options`.

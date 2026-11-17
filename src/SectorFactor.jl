@@ -397,7 +397,7 @@ Compute the scale `ψ` of the own draw of one asset: `ψ^2 = (σ²_own - σ²_dr
 The drift variance `σ²_drift` is the variance that a drifting `β` adds to the residual of the asset: `drift_variance(β_halflife, β_scale)` times the
 variance of the market growth rate. The drift variance is zero for a fixed `β`.
 
-The single-index residual comes from a fit with a fixed `β`. That residual already holds the movement of the real `β`. We subtract
+The single-index residual comes from a fit with a fixed `β`. That residual already holds the movement of the stock's actual `β` over time. We subtract
 `σ²_drift`, so that the synthetic drift does not add that variance a second time. Then the drift, sector, and own terms together
 carry the variance of the residual. The scale `ψ` also differs from `1`, because the sector factor averages the residuals of its assets,
 asset `i` included. As a result, part of the leftover residual of asset `i` still moves with the sector factor. Independent draws lose that

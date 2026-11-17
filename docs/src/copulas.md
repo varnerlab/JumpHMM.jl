@@ -16,7 +16,7 @@ copula.Σ   # the correlation matrix of the copula
 copula.ν   # the degrees of freedom of the copula
 ```
 
-We replace each column of growth rates by its ranks divided by the number of days plus one. This gives uniform numbers strictly between `0` and `1` that keep only the order of the growth rates of each asset. The correlation matrix ``\Sigma`` of these uniform numbers is the correlation matrix of the copula.
+We replace each column of growth rates by its ranks divided by the number of days plus one. The division gives uniform numbers strictly between `0` and `1` that keep only the order of the growth rates of each asset. The correlation matrix ``\Sigma`` of these uniform numbers is the correlation matrix of the copula.
 
 If ``\Sigma`` is not positive definite, we raise each eigenvalue below `1e-8` to `1e-8` and rescale ``\Sigma`` to ones on the diagonal. The sampler needs a positive definite matrix, because it factors ``\Sigma``.
 

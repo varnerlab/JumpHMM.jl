@@ -56,7 +56,7 @@ The [`sample_dependence`](@ref sample_dependence(::MyHybridSingleIndexDependence
 
 Let ``\sigma_m^2`` be the variance of the growth rate of the market in the data, and ``\sigma_i^2`` the variance of the simulated path of asset ``i``. We scale the path of each asset into its residual term in one of two ways:
 
-- __High R²:__ If ``R_i^2`` is at least `r2_preserve_threshold`, we scale the path to the variance ``\beta_i^2 \sigma_m^2 (1 - R_i^2)/R_i^2``. This is the residual variance that gives the asset the R² of the data.
+- __High R²:__ If ``R_i^2`` is at least `r2_preserve_threshold`, we scale the path to the variance ``\beta_i^2 \sigma_m^2 (1 - R_i^2)/R_i^2``. That residual variance gives the simulated asset the R² of the data.
 - __Lower R²:__ Otherwise, we keep the variance ``\sigma_i^2`` of the asset. The market term carries the fraction ``q_i = \beta_i^2 \sigma_m^2/\sigma_i^2`` of that variance, and the scaled path carries the rest. If ``q_i`` is above ``1 - \phi``, where ``\phi`` is `idiosyncratic_floor`, we lower ``\beta_i`` so that the scaled path keeps the fraction ``\phi``.
 
 Last, we reorder the scaled path of each asset so that its ranks follow the ranks of a copula draw, and we add ``\alpha_i + \beta_i\, g_m(t)``.

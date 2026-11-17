@@ -7,7 +7,7 @@ CurrentModule = JumpHMM
 This page shows the single-asset workflow: compute the growth rates, build the model, tune the jump settings, simulate, and study other jump settings. The example makes its own synthetic share price series, so that the code runs without a data file.
 
 ## Make a share price series
-The code below makes 1000 daily share prices, with a calm stretch and a volatile stretch. In your own work, use the closing prices of a stock here, as an `Array{Float64,1}`.
+The code below makes 1001 daily share prices, spanning 1000 trading days, with a calm stretch and a volatile stretch. In your own work, use the closing prices of a stock here, as an `Array{Float64,1}`.
 
 ```@example workflow
 import JumpHMM
@@ -24,13 +24,14 @@ for t ∈ 1:number_of_days
     if t > 600 && t <= 700
         σ = 0.45;           # the volatility of a volatile day (1/sqrt(year))
     end
+    # compute the next share price, where 0.08 is the drift of the share price (1/year) -
     S[t+1] = S[t] * exp((0.08 - 0.5 * σ^2) * Δt + σ * sqrt(Δt) * randn());
 end
 nothing # hide
 ```
 
 ## Compute the growth rates
-The [`excess_growth_rates`](@ref excess_growth_rates(::Array{Float64,1})) function turns ``n + 1`` share prices into ``n`` growth rates, in 1/year. A risk-free rate `rf = 0.0` keeps the total growth rate.
+The [`excess_growth_rates`](@ref excess_growth_rates(::Array{Float64,1})) function turns ``n + 1`` share prices into ``n`` growth rates, in 1/year. With `rf = 0.0`, the excess growth rate equals the growth rate.
 
 ```@example workflow
 g = JumpHMM.excess_growth_rates(S; rf = 0.0, Δt = Δt);  # the growth rates (1/year)
@@ -49,7 +50,7 @@ model = JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (
 model.ϵ
 ```
 
-Every scalar setting is a `Float64` or an `Int64`. Write `ν = 5.0`, not `ν = 5`, because an integer where the package expects a `Float64` throws an error. The page [The Model](model.md) lists the steps of the build and the fields of the model.
+Every scalar setting is a `Float64` or an `Int64`. Write `ν = 5.0`, not `ν = 5`, because the build throws an error for an integer `ν`. The page [The Model](model.md) lists the steps of the build and the fields of the model.
 
 ## Tune the jump settings
 The [`tune`](@ref tune(::MyJumpHiddenMarkovModel, ::Array{Float64,1})) function searches a grid of jump settings for the pair whose simulated paths best match the growth rates. It returns a new model that holds the best pair, and the input model is not changed.
@@ -57,7 +58,7 @@ The [`tune`](@ref tune(::MyJumpHiddenMarkovModel, ::Array{Float64,1})) function 
 ```@example workflow
 tuned_model = JumpHMM.tune(model, g;
     ϵ_range = range(1e-3, 5e-3, length = 3),  # the candidate probabilities that an episode starts on a day
-    λ_range = range(10.0, 50.0, length = 3),  # the candidate means of the episode length (trading days)
+    λ_range = range(10.0, 50.0, length = 3),  # the candidate values of the mean of the Poisson episode length (trading days)
     number_of_paths = 20,                     # the number of simulated paths for each pair
     seed = 5660                               # the seed of the random number generator
 );

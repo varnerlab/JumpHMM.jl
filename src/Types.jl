@@ -50,7 +50,7 @@ and a jump episode can move the asset into the tails.
 - `emission_fallback::Array{Bool,1}`: A flag that is `true` if a state uses the standard deviation of all growth rates, because the state had fewer than `min_obs` growth rates or a standard deviation below `1e-12`
 - `ν::Float64`: The degrees of freedom of the Student-t emission distributions
 - `ϵ::Float64`: The probability that a jump episode starts at a time step. A value of `0.0` means the model has no jumps
-- `λ::Float64`: The rate of the Poisson distribution of the length of a jump episode
+- `λ::Float64`: The mean of the Poisson episode length, in trading days
 - `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail
 - `N_tail::Int64`: The number of states in each tail that a jump episode can reach
 - `Δt::Float64`: The time step of the growth rates, in years
@@ -432,7 +432,7 @@ end
 The `MyPortfolioModel` mutable struct holds a model of several assets: one hidden Markov model for each asset and a dependence model that links the assets.
 
 ### Required fields
-- `tickers::Array{String,1}`: The tickers of the assets. A portfolio built with a market leaves the market ticker out
+- `tickers::Array{String,1}`: The tickers of the assets. A single-index, hybrid, or sector factor portfolio leaves the market ticker out
 - `marginals::Dict{String,MyJumpHiddenMarkovModel}`: The hidden Markov model of each asset, keyed by ticker
 - `dependence::AbstractDependenceModel`: The model that links the assets
 - `tickers_map::Dict{String,Int64}`: The column of each ticker in the price matrix used to fit the model

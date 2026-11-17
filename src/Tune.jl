@@ -9,7 +9,7 @@ and in the path, plus `w_κ` times the squared difference between the excess kur
 ### Arguments
 - `paths::NamedTuple`: The output of `simulate`, with the matrices `growth_rates` and `episodes`
 - `acf_observed::Array{Float64,1}`: The autocorrelation of the absolute growth rates in the data, at each lag in `lags`
-- `κ_observed::Float64`: The kurtosis of the growth rates in the data
+- `κ_observed::Float64`: The excess kurtosis of the growth rates in the data
 - `lags::Array{Int64,1}`: The lags of the autocorrelation
 - `w_κ::Float64`: The weight of the kurtosis error in the score
 
@@ -61,7 +61,7 @@ end
 
 Search a grid of jump settings (`ϵ`, `λ`) for the pair whose simulated paths best match the data. For each pair, we simulate paths and
 compare them with the data on two things: the autocorrelation of the absolute growth rates, and the excess kurtosis of the growth rates.
-The pair with the lowest mean score wins. The input model is not changed. If no pair produces a path with a jump episode, we warn
+The tuned model gets the pair with the lowest mean score. The input model is not changed. If no pair produces a path with a jump episode, we warn
 and return the first pair of the grid.
 
 ### Arguments
@@ -73,7 +73,7 @@ and return the first pair of the grid.
 
 ### Optional Arguments
 - `ϵ_range`: The values of `ϵ`, the chance per day that a jump episode starts. Default: `range(1e-4, 2.5e-2, length = 20)`
-- `λ_range`: The values of `λ`, the rate of the Poisson distribution of the length of a jump episode, in trading days. Default: `range(10.0, 160.0, length = 16)`
+- `λ_range`: The candidate values of `λ`, the mean of the Poisson episode length, in trading days. Default: `range(10.0, 160.0, length = 16)`
 - `number_of_paths::Int64`: The number of paths to simulate for each pair. Default: `200`
 - `number_of_steps::Int64`: The number of days in each path. If `0`, we use the number of days in `growth_rates`. Default: `0`
 - `w_κ::Float64`: The weight of the kurtosis error in the score. Default: `0.20`

@@ -20,7 +20,7 @@ The model reproduces three stylized facts of the daily growth rates of stocks:
 - __Little linear autocorrelation:__ The growth rate on one day says almost nothing about the growth rate on the next day.
 - __Volatility clustering:__ Large moves tend to follow large moves. The autocorrelation of the absolute growth rate stays positive for many days.
 
-The hidden Markov model gives the heavy tails and the small linear autocorrelation. Without jump episodes, the autocorrelation of the absolute growth rate in the simulated paths falls to near zero within a few days. The jump episodes add the volatility clustering.
+The hidden Markov model gives the heavy tails and the small linear autocorrelation. Synthetic growth-rate paths simulated without jump episodes show less volatility clustering than the market data. The jump episodes add the missing volatility clustering.
 
 ## Installation
 The package can be installed by running the following command in the Julia REPL:

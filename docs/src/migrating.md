@@ -14,7 +14,7 @@ Most changes follow a few rules:
 - __No risk-free rate in the model:__ The single-asset model has no `rf` field. The portfolio stores `rf` and `Δt` and uses them when it computes growth rates.
 - __Names:__ The setting `N` is now `number_of_states`, `n_paths` is `number_of_paths`, `n_steps` and `n` are `number_of_steps`, and `dt` is `Δt`. The word `returns` is now `growth_rates`, and `jumps` is now `episodes`.
 - __Required settings:__ The keys `number_of_states` and `ν` have no default. Version 0.4.1 used `N = 100` and `ν = 5.0` when they were left out.
-- __Exact types:__ Scalars are `Float64` or `Int64`, and arrays are `Array{Float64,1}` or `Array{Float64,2}`. An integer such as `126` where a `Float64` is expected, or a view of an array, throws an error.
+- __Exact types:__ Scalars are `Float64` or `Int64`, and arrays are `Array{Float64,1}` or `Array{Float64,2}`. A function argument such as `126` where the function expects a `Float64`, or a view of an array, throws an error. Write `126.0` everywhere, including the keys of `build`.
 
 The tables below write the names without the `JumpHMM.` prefix to save space. Write the prefix in your code.
 
@@ -32,7 +32,7 @@ The tables below write the names without the `JumpHMM.` prefix to save space. Wr
 | `JumpParameters` | The fields `ϵ`, `λ`, `p_neg`, and `N_tail` of `MyJumpHiddenMarkovModel` |
 | `SimulationPath`, `SimulationResult` | The NamedTuple `(growth_rates, states, episodes)` of days × paths matrices that `simulate` returns |
 | `ValidationReport` | `MyValidationReportModel` |
-| `PathTestResult` | The per-path vector fields of `MyValidationReportModel` |
+| `PathTestResult` | The per-path vector fields of `MyValidationReportModel`, except `kurtosis_emp`, which is now the single value `report.kurtosis_emp` |
 | `GaussianCopula` | `MyGaussianCopulaModel` |
 | `StudentTCopula` | `MyStudentTCopulaModel` |
 | `GaussianBiCopula` | `MyGaussianBivariateCopulaModel` |
@@ -66,7 +66,7 @@ The tables below write the names without the `JumpHMM.` prefix to save space. Wr
 | `result.paths[p].states` | `paths.states[:, p]` |
 | `result.paths[p].jumps` | `paths.episodes[:, p]` |
 | `portfolio_result.results[ticker].paths[p].observations` | `paths[ticker].growth_rates[:, p]` |
-| `report.path_results[i].ks_pvalue`, and the other per-path values | `report.ks_pvalue[i]`, and the other per-path vector fields |
+| `report.path_results[i].ks_pvalue`, and the other per-path values | `report.ks_pvalue[i]`, and the other per-path vector fields, except `kurtosis_emp`, which is now the single value `report.kurtosis_emp` |
 | `edge.var1`, `edge.var2` | `edge.first`, `edge.second` |
 | `vine.d` | `vine.number_of_assets` |
 

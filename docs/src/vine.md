@@ -40,9 +40,9 @@ vine.edges[1][1].copula       # the bivariate copula of the first edge of tree 1
 Each edge is a [`MyVineEdgeModel`](@ref) with the two assets `first` and `second`, the assets it is conditioned on (`conditioned`), and its bivariate copula (`copula`).
 
 ## Sample
-The [`sample_dependence`](@ref sample_dependence(::MyVineCopulaModel, ::Int64)) function draws uniform numbers from the vine, with one row per day and one column per asset. For each day, it draws one independent uniform number per asset and passes them through the inverse conditional distributions of the edges, from the last tree back to the first.
+The [`sample_dependence`](@ref sample_dependence(::MyVineCopulaModel, ::Int64)) function draws uniform numbers from the vine, with one row per day and one column per asset. For each day, it draws one independent uniform number per asset and passes these uniform numbers through the inverse conditional distributions of the edges, from the last tree back to the first.
 
-The draws come from the global random number generator. A [portfolio](portfolio.md) uses them as it uses the uniform numbers of the other copulas.
+The draws come from the global random number generator. A [portfolio](portfolio.md) uses the vine draws as it uses the uniform numbers of the other copulas.
 
 ```julia
 U = JumpHMM.sample_dependence(vine, 252);   # 252 days × assets, every value strictly between 0 and 1

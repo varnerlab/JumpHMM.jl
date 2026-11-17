@@ -64,7 +64,7 @@ paths["JPM"].growth_rates     # the growth rates of JPM (1/year), days × paths
 ```
 
 ## Validate
-The [`validate`](@ref validate(::MyPortfolioModel, ::Array{Float64,2})) function returns a `Dict{String,MyValidationReportModel}`, keyed by ticker. It validates the model of each asset against the growth rates of that asset, with the single-asset [`validate`](@ref validate(::MyJumpHiddenMarkovModel, ::Array{Float64,1})). A sector factor portfolio validates each own model against its own level series instead, because the own model describes the residual of the asset after its sector term.
+The [`validate`](@ref validate(::MyPortfolioModel, ::Array{Float64,2})) function returns a `Dict{String,MyValidationReportModel}`, keyed by ticker. It validates the model of each asset against the growth rates of that asset, with the single-asset [`validate`](@ref validate(::MyJumpHiddenMarkovModel, ::Array{Float64,1})). A sector factor portfolio validates each own model against the residual series it was fit to (`own_levels`) instead, because the own model describes the residual of the asset after its sector term.
 
 ```julia
 reports = JumpHMM.validate(portfolio, prices; number_of_paths = 100, seed = 5660);

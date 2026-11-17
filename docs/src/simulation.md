@@ -33,7 +33,7 @@ The [`prices_from_growth_rates`](@ref) function turns one path of growth rates b
 S_{t+1} = S_t \exp\left((g_t + r_f)\,\Delta t\right)
 ```
 
-where ``S_t`` is the share price on day ``t`` (USD/share), ``g_t`` is the growth rate (1/year), and ``r_f`` is the risk-free rate (1/year). Use the same `rf` and `Δt` that made the growth rates, so that the share prices come back on the same scale:
+where ``S_t`` is the share price on day ``t`` (USD/share), ``g_t`` is the excess growth rate (1/year), and ``r_f`` is the risk-free rate (1/year). Use the same `rf` and `Δt` that made the growth rates, so that the share prices come back on the same scale:
 
 ```julia
 S₀ = 100.0;                                 # the first share price (USD/share)
