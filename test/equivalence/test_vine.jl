@@ -1,11 +1,11 @@
 using Random
 
 """
-    family_label(copula::JumpHMM.AbstractBivariateCopulaModel) -> String
+    vine_family_label(copula::JumpHMM.AbstractBivariateCopulaModel) -> String
 
 Name the family of a bivariate copula: "gaussian", "studentt", "clayton", "gumbel", or "frank".
 """
-function family_label(copula::JumpHMM.AbstractBivariateCopulaModel)::String
+function vine_family_label(copula::JumpHMM.AbstractBivariateCopulaModel)::String
     if copula isa JumpHMM.MyGaussianBivariateCopulaModel
         return "gaussian";
     elseif copula isa JumpHMM.MyStudentTBivariateCopulaModel
@@ -21,11 +21,11 @@ function family_label(copula::JumpHMM.AbstractBivariateCopulaModel)::String
 end
 
 """
-    family_parameters(copula::JumpHMM.AbstractBivariateCopulaModel) -> Array{Float64,1}
+    vine_family_parameters(copula::JumpHMM.AbstractBivariateCopulaModel) -> Array{Float64,1}
 
 Parameters of a bivariate copula: ρ for gaussian; ρ then ν for studentt; θ for the others.
 """
-function family_parameters(copula::JumpHMM.AbstractBivariateCopulaModel)::Array{Float64,1}
+function vine_family_parameters(copula::JumpHMM.AbstractBivariateCopulaModel)::Array{Float64,1}
     if copula isa JumpHMM.MyGaussianBivariateCopulaModel
         return [copula.ρ];
     elseif copula isa JumpHMM.MyStudentTBivariateCopulaModel
@@ -44,8 +44,8 @@ end
     parameters = Float64[]
     for tree ∈ vine.edges
         for edge ∈ tree
-            push!(families, family_label(edge.copula))
-            append!(parameters, family_parameters(edge.copula))
+            push!(families, vine_family_label(edge.copula))
+            append!(parameters, vine_family_parameters(edge.copula))
         end
     end
     @test vine.order == reference["vine/order"]
@@ -81,11 +81,11 @@ end
                     push!(hinv, JumpHMM._bicop_hinv(c, a, b))
                 end
             end
-            @test family_parameters(c) == reference[prefix * "/parameters"]
+            @test vine_family_parameters(c) == reference[prefix * "/parameters"]
             @test logpdf == reference[prefix * "/logpdf"]
             @test hfunc == reference[prefix * "/hfunc"]
             @test hinv == reference[prefix * "/hinv"]
         end
-        @test family_label(JumpHMM._select_bicop(u, v)) == reference["bicop/select/" * case]
+        @test vine_family_label(JumpHMM._select_bicop(u, v)) == reference["bicop/select/" * case]
     end
 end

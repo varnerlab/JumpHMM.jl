@@ -1,3 +1,5 @@
+using StatsBase
+
 @testset "validate output" begin
     G = reference["finance/G_spy"]
     m = JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (growth_rates = G, number_of_states = 20, ν = 5.0, ϵ = 1e-3, λ = 50.0))
@@ -11,7 +13,7 @@
     @test 0.0 <= r.ks_pass_rate <= 1.0
     @test 0.0 <= r.ad_pass_rate <= 1.0
     @test r.α == 0.05
-    @test r.kurtosis_emp == JumpHMM.StatsBase.kurtosis(G)
+    @test r.kurtosis_emp == StatsBase.kurtosis(G)
 end
 
 @testset "distances" begin

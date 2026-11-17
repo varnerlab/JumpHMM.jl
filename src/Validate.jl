@@ -30,8 +30,12 @@ function wasserstein_distance(x::Array{Float64,1}, y::Array{Float64,1})::Float64
     # different lengths: compare the two samples at the same number of evenly spaced quantiles -
     number_of_quantiles = max(length(sx), length(sy));
     probabilities = range(0, 1, length = number_of_quantiles);
-    qx = [quantile(sx, p) for p ∈ probabilities];
-    qy = [quantile(sy, p) for p ∈ probabilities];
+    qx = Array{Float64,1}(undef, number_of_quantiles);
+    qy = Array{Float64,1}(undef, number_of_quantiles);
+    for (i, p) ∈ enumerate(probabilities)
+        qx[i] = quantile(sx, p);
+        qy[i] = quantile(sy, p);
+    end
     return mean(abs.(qx .- qy));
 end
 
@@ -56,17 +60,17 @@ d = JumpHMM.hellinger_distance([0.1, -0.2, 0.3], [0.0, 0.2, 0.4]);
 function hellinger_distance(x::Array{Float64,1}, y::Array{Float64,1})::Float64
 
     # the range that covers both samples -
-    lo = min(minimum(x), minimum(y));
-    hi = max(maximum(x), maximum(y));
+    lowest = min(minimum(x), minimum(y));
+    highest = max(maximum(x), maximum(y));
 
     # both samples are the same single value, so the distributions are identical -
-    if (lo == hi)
+    if (lowest == highest)
         return 0.0;
     end
 
     # common bin edges for both samples -
     number_of_bins = max(30, round(Int, sqrt(max(length(x), length(y)))));
-    edges = range(lo, hi, length = number_of_bins + 1);
+    edges = range(lowest, highest, length = number_of_bins + 1);
 
     # histogram each sample, and scale each histogram to sum to one -
     hx = StatsBase.fit(Histogram, x, edges);
@@ -128,20 +132,20 @@ function validate(model::MyJumpHiddenMarkovModel, growth_rates::Array{Float64,1}
 
     # main loop - compare each path with the data -
     for i ∈ 1:number_of_paths
-        g_sim = paths.growth_rates[:, i];
+        simulated_growth_rates = paths.growth_rates[:, i];
 
         # the two-sample tests -
-        ks_pvalue[i] = pvalue(ApproximateTwoSampleKSTest(growth_rates, g_sim));
-        ad_pvalue[i] = pvalue(KSampleADTest(growth_rates, g_sim));
+        ks_pvalue[i] = pvalue(ApproximateTwoSampleKSTest(growth_rates, simulated_growth_rates));
+        ad_pvalue[i] = pvalue(KSampleADTest(growth_rates, simulated_growth_rates));
 
         # the distances -
-        wasserstein[i] = wasserstein_distance(growth_rates, g_sim);
-        hellinger[i] = hellinger_distance(growth_rates, g_sim);
+        wasserstein[i] = wasserstein_distance(growth_rates, simulated_growth_rates);
+        hellinger[i] = hellinger_distance(growth_rates, simulated_growth_rates);
 
         # the error in the autocorrelation of the absolute growth rates, and the kurtosis -
-        acf_sim = autocor(abs.(g_sim), lags);
+        acf_sim = autocor(abs.(simulated_growth_rates), lags);
         acf_mae[i] = mean(abs.(acf_emp .- acf_sim));
-        kurtosis_sim[i] = kurtosis(g_sim);
+        kurtosis_sim[i] = kurtosis(simulated_growth_rates);
     end
 
     # summarize - add the values one at a time in path order, then divide by the number of paths.

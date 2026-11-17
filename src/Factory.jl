@@ -590,6 +590,7 @@ function build(model::Type{MyVineCopulaModel}, data::NamedTuple)::MyVineCopulaMo
             for i ∈ 1:n
                 h_center[i] = _bicop_hfunc(cop_first, center_data[i], pseudo[k+1][i]);
             end
+            # this value is never read, because the next tree starts at asset k + 1 -
             new_pseudo[k] = h_center;
         end
 
@@ -836,7 +837,13 @@ function build(model::Type{MyHybridSingleIndexDependenceModel}, data::NamedTuple
     if length(tickers) != number_of_columns
         throw(ArgumentError("tickers must have one label for each column of prices"));
     end
-    market_index = findfirst(==(market), tickers);
+    market_index = nothing;
+    for j ∈ eachindex(tickers)
+        if tickers[j] == market
+            market_index = j;
+            break;
+        end
+    end
     if isnothing(market_index) == true
         throw(ArgumentError("the market ticker $(market) is not in tickers"));
     end
@@ -1389,11 +1396,20 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
         m.tickers = copy(tickers);
         m.marginals = marginals;
         m.dependence = build(dependence, (growth_rates = growth_rates,));
+
+        # a copula portfolio has no market, so the stored market ticker is empty -
+        m.market_ticker = "";
     end
 
     # single index: the single-index model, then a hidden Markov model for each asset except the market -
     if is_single_index == true
-        market_index = findfirst(==(market), tickers);
+        market_index = nothing;
+        for j ∈ eachindex(tickers)
+            if tickers[j] == market
+                market_index = j;
+                break;
+            end
+        end
         if isnothing(market_index) == true
             throw(ArgumentError("the market ticker $(market) is not in tickers"));
         end

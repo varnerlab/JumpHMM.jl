@@ -3,7 +3,7 @@
         start::Union{Int64,Nothing} = nothing, seed::Union{Int64,Nothing} = nothing) -> NamedTuple
 
 Simulate synthetic growth rate paths from a jump hidden Markov model. Day 1 of each path starts in a state and emits a growth rate.
-Every later day is one of three kinds. On an ordinary day, the model moves to a new state using the transition matrix. On a jump day, the model
+Every later day is an ordinary day or a jump day. On an ordinary day, the model draws the next state from the transition matrix. On a jump day, the model
 jumps into one of the tail states. A jump episode starts with probability `ϵ` on a day and lasts a Poisson(`λ`) number of days.
 An episode length of zero means that day is an ordinary day. An episode that would run past the last day stops at the last day.
 

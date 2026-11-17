@@ -503,9 +503,11 @@ function _bicop_fit(model::Type{MyStudentTBivariateCopulaModel}, u::Array{Float6
     for ν_candidate ∈ [2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0, 30.0]
         c = build(MyStudentTBivariateCopulaModel, (ρ = ρ, ν = ν_candidate));
         ll = sum(_bicop_logpdf(c, u[i], v[i]) for i ∈ eachindex(u));
-        if isfinite(ll) && ll > best_ll
-            best_ll = ll;
-            best_ν = ν_candidate;
+        if isfinite(ll) == true
+            if ll > best_ll
+                best_ll = ll;
+                best_ν = ν_candidate;
+            end
         end
     end
 
@@ -625,11 +627,11 @@ function _bicop_fit(model::Type{MyFrankBivariateCopulaModel}, u::Array{Float64,1
     end
 
     # the search interval has the sign of tau -
-    lo = 0.01;
-    hi = 50.0;
-    if τ < 0
-        lo = -50.0;
-        hi = -0.01;
+    lo = -50.0;
+    hi = -0.01;
+    if τ > 0
+        lo = 0.01;
+        hi = 50.0;
     end
 
     # main loop - halve the interval until it is short enough -
@@ -707,9 +709,7 @@ end
 """
     sample_dependence(model::MyVineCopulaModel, number_of_steps::Int64) -> Array{Float64,2}
 
-Draw dependent uniform numbers from a C-vine copula. For each step we draw one independent uniform number per asset, and push
-them through the inverse h-functions of the edges, from the last tree back to the first. Then we put the columns back in the order
-of the assets. The draws come from the global random number generator, so call `Random.seed!` first to repeat a sample.
+Draw dependent uniform numbers from a C-vine copula. For each step we draw one independent uniform number per asset, and push them through the inverse h-functions of the edges, from the last tree back to the first. Then we put the columns back in the order of the assets. The draws come from the global random number generator, so call `Random.seed!` first to repeat a sample.
 
 ### Arguments
 - `model::MyVineCopulaModel`: The vine copula

@@ -17,6 +17,8 @@
     @test given.ψ == m.ψ
     @test given.ε_center == m.ε_center
     @test given.market_model === m.market_model
+    @test given.sector_models[1] === m.sector_models[1]
+    @test given.own_models[1] === m.own_models[1]
 
     # intercept_pull moves each α toward the mean α -
     α̂ = m.α
@@ -28,6 +30,12 @@
     # build rejects a missing market ticker and a sector list of the wrong length -
     @test_throws ArgumentError JumpHMM.build(JumpHMM.MySectorFactorModel, merge(data, (market = "QQQ",)))
     @test_throws ArgumentError JumpHMM.build(JumpHMM.MySectorFactorModel, merge(data, (sector = sectors[1:11],)))
+
+    # build rejects a wrong-length β_scale, own_models and sector_models, and a missing required key -
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MySectorFactorModel, merge(data, (β_scale = fill(0.3, 11),)))
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MySectorFactorModel, merge(data, (own_models = m.own_models[1:11],)))
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MySectorFactorModel, merge(data, (sector_models = m.sector_models[1:end-1],)))
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MySectorFactorModel, Base.structdiff(data, (ν = 5.0,)))
 
     # the seeds of the draws must stay in range -
     @test_throws ArgumentError JumpHMM.sample_draws(m, 10; seed = 10^8)
@@ -64,6 +72,7 @@
     @test m.ψ == JumpHMM.own_scales(m)
     @test changed.own_models === m.own_models
     @test changed.sector_levels === m.sector_levels
+    @test JumpHMM.compose(changed, A).G[:, 5] == JumpHMM.compose_name(m, A, 5; β_scale = 0.3).g
 
     # with_parameters rejects a negative β_scale entry and a wrong-length α -
     negative = fill(0.3, 12)

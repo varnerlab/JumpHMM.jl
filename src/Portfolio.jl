@@ -221,13 +221,20 @@ function simulate(portfolio::MyPortfolioModel, number_of_steps::Int64; number_of
         throw(ArgumentError("number_of_steps must be at least 1, got $(number_of_steps)"));
     end
 
+    # check the dependence model, before we touch the random number generator -
+    dep = portfolio.dependence;
+    is_known = (isa(dep, MyGaussianCopulaModel) || isa(dep, MyStudentTCopulaModel) || isa(dep, MyVineCopulaModel) ||
+        isa(dep, MySingleIndexDependenceModel) || isa(dep, MyHybridSingleIndexDependenceModel) || isa(dep, MySectorFactorModel));
+    if (is_known == false)
+        throw(ArgumentError("unsupported dependence model: $(typeof(dep))"));
+    end
+
     # seed the global random number generator, if we were given a seed -
     if (isnothing(seed) == false)
         Random.seed!(seed);
     end
 
     # initialize -
-    dep = portfolio.dependence;
     tickers = portfolio.tickers;
     number_of_assets = length(tickers);
     results = Dict{String,NamedTuple}();
@@ -365,7 +372,6 @@ function validate(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers
                 acf_lags = acf_lags, seed = seed);
         end
     else
-
         # every other dependence model: check the hidden Markov model of each ticker on its price column -
         for ticker ∈ portfolio.tickers
             growth_rates = excess_growth_rates(prices[:, col_map[ticker]]; rf = portfolio.rf, Δt = portfolio.Δt);

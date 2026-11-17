@@ -22,4 +22,19 @@
     @test sim.market_model.transition == expected.transition
     @test sim.market_model.emission_μ == expected.emission_μ
     @test sim.market_model.boundaries == expected.boundaries
+
+    # the hybrid build rejects a missing market ticker, a tickers/columns mismatch and a constant market series -
+    hybrid = (tickers = inputs["tickers"][1:6], prices = P[:, 1:6], market = "SPY", number_of_states = 10, ν = 5.0)
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MyHybridSingleIndexDependenceModel, merge(hybrid, (market = "XYZ",)))
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MyHybridSingleIndexDependenceModel,
+        merge(hybrid, (tickers = inputs["tickers"][1:5],)))
+    constant_market = copy(P[:, 1:6])
+    constant_market[:, 1] .= 100.0
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MyHybridSingleIndexDependenceModel,
+        merge(hybrid, (prices = constant_market,)))
+
+    # a hybrid build with a Gaussian copula runs and samples -
+    gaussian = JumpHMM.build(JumpHMM.MyHybridSingleIndexDependenceModel, merge(hybrid, (copula = JumpHMM.MyGaussianCopulaModel,)))
+    @test gaussian.copula isa JumpHMM.MyGaussianCopulaModel
+    @test size(JumpHMM.sample_dependence(gaussian, 50)) == (49, 5)
 end

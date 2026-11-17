@@ -477,8 +477,8 @@ each sector model, one path of each own model, and the standard normal shocks of
 `compose(model, sample_draws(model, number_of_steps; seed = seed))` is the path that `sample_dependence` draws.
 We keep the draws, so we can compose the same random draws again under other parameters (`with_parameters`, `compose_name`).
 
-Each part has its own seed: the market uses `seed`, sector `s` uses `10^12 + 10^4 seed + s`, and asset `j` uses
-`2 10^12 + 10^4 seed + j`. The shocks of the drift come from their own generator, `Xoshiro(3 10^12 + seed)`.
+Each part has its own seed: the market uses `seed`, sector `s` uses `10^12 + 10^4 * seed + s`, and asset `j` uses
+`2 * 10^12 + 10^4 * seed + j`. The shocks of the drift come from their own generator, `Xoshiro(3 * 10^12 + seed)`.
 These streams stay apart for `0 ≤ seed < 10^8` and fewer than `10^4` assets and sectors, so we throw an `ArgumentError` outside
 that range. Like `simulate`, this function reseeds the global random number generator.
 
@@ -525,7 +525,7 @@ function sample_draws(model::MySectorFactorModel, number_of_steps::Int64; seed::
     F = zeros(Float64, number_of_steps, number_of_sectors);
     sector_episodes = fill(false, number_of_steps, number_of_sectors);
 
-    # one path of each sector model: sector s uses the seed 10^12 + 10^4 seed + s -
+    # one path of each sector model: sector s uses the seed 10^12 + 10^4 * seed + s -
     for s ∈ 1:number_of_sectors
         sector_path = simulate(model.sector_models[s], number_of_steps; number_of_paths = 1,
             seed = 10^12 + 10^4 * seed + s);
@@ -536,7 +536,7 @@ function sample_draws(model::MySectorFactorModel, number_of_steps::Int64; seed::
     # the standard normal shocks of the drift of β, from their own random number generator -
     Z = randn(Xoshiro(3 * 10^12 + seed), number_of_steps, number_of_assets);
 
-    # one path of each own model: asset j uses the seed 2 10^12 + 10^4 seed + j -
+    # one path of each own model: asset j uses the seed 2 * 10^12 + 10^4 * seed + j -
     E = zeros(Float64, number_of_steps, number_of_assets);
     own_episodes = fill(false, number_of_steps, number_of_assets);
     for j ∈ 1:number_of_assets

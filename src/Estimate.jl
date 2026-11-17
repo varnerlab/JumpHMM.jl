@@ -213,7 +213,12 @@ function estimate_emissions(states::Array{Int64,1}, growth_rates::Array{Float64,
     for k ∈ 1:number_of_states
 
         # the growth rates that are in state k -
-        indexes = findall(==(k), states);
+        indexes = Array{Int64,1}();
+        for t ∈ eachindex(states)
+            if states[t] == k
+                push!(indexes, t);
+            end
+        end
         number_of_observations = length(indexes);
         n[k] = number_of_observations;
 

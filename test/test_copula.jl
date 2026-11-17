@@ -15,4 +15,7 @@
     @test_throws ArgumentError JumpHMM.build(JumpHMM.MyStudentTCopulaModel, (growth_rates = R[:, 1:1],))
     @test_throws ArgumentError JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (growth_rates = R[1:1, :],))
     @test_throws ArgumentError JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (growth_rates = fill(NaN, 5, 2),))
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (returns = R,))
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MyStudentTCopulaModel, (returns = R,))
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MyStudentTCopulaModel, (growth_rates = fill(NaN, 5, 2),))
 end

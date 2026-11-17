@@ -119,9 +119,9 @@ function forward_filter(model::MyJumpHiddenMarkovModel, growth_rates::Array{Floa
     end
 
     # turn the log values into probabilities: subtract the largest value, exponentiate, and divide by the sum -
-    m = maximum(log_alpha);
-    if (isfinite(m) == true)
-        alpha[1, :] .= exp.(log_alpha .- m) ./ sum(exp.(log_alpha .- m));
+    largest_log_value = maximum(log_alpha);
+    if (isfinite(largest_log_value) == true)
+        alpha[1, :] .= exp.(log_alpha .- largest_log_value) ./ sum(exp.(log_alpha .- largest_log_value));
     else
 
         # every state has zero likelihood, so give every state the same probability -
@@ -149,10 +149,10 @@ function forward_filter(model::MyJumpHiddenMarkovModel, growth_rates::Array{Floa
         end
 
         # keep the log values for the next day, and store the probabilities for this day -
-        m = maximum(log_alpha_new);
-        if (isfinite(m) == true)
+        largest_log_value = maximum(log_alpha_new);
+        if (isfinite(largest_log_value) == true)
             log_alpha .= log_alpha_new;
-            alpha[t, :] .= exp.(log_alpha_new .- m) ./ sum(exp.(log_alpha_new .- m));
+            alpha[t, :] .= exp.(log_alpha_new .- largest_log_value) ./ sum(exp.(log_alpha_new .- largest_log_value));
         else
 
             # every state has zero likelihood, so give every state the same probability -
@@ -200,7 +200,7 @@ function log_likelihood(model::MyJumpHiddenMarkovModel, growth_rates::Array{Floa
     log_transition = log.(model.transition);
     log_alpha = Array{Float64,1}(undef, number_of_states);
     log_alpha_new = Array{Float64,1}(undef, number_of_states);
-    ll = 0.0;
+    total_log_likelihood = 0.0;
 
     # day 1: the log of the stationary probability plus the log of the emission density -
     for k ∈ 1:number_of_states
@@ -212,10 +212,10 @@ function log_likelihood(model::MyJumpHiddenMarkovModel, growth_rates::Array{Floa
     end
 
     # add the log of the day's total to the log-likelihood, and divide it out of the state values -
-    m = maximum(log_alpha);
-    if (isfinite(m) == true)
-        log_Z = m + log(sum(exp.(log_alpha .- m)));
-        ll += log_Z;
+    largest_log_value = maximum(log_alpha);
+    if (isfinite(largest_log_value) == true)
+        log_Z = largest_log_value + log(sum(exp.(log_alpha .- largest_log_value)));
+        total_log_likelihood += log_Z;
         log_alpha .-= log_Z;
     else
 
@@ -243,10 +243,10 @@ function log_likelihood(model::MyJumpHiddenMarkovModel, growth_rates::Array{Floa
         end
 
         # add the log of the day's total to the log-likelihood, and divide it out of the state values -
-        m = maximum(log_alpha_new);
-        if (isfinite(m) == true)
-            log_Z = m + log(sum(exp.(log_alpha_new .- m)));
-            ll += log_Z;
+        largest_log_value = maximum(log_alpha_new);
+        if (isfinite(largest_log_value) == true)
+            log_Z = largest_log_value + log(sum(exp.(log_alpha_new .- largest_log_value)));
+            total_log_likelihood += log_Z;
             log_alpha .= log_alpha_new .- log_Z;
         else
 
@@ -256,5 +256,5 @@ function log_likelihood(model::MyJumpHiddenMarkovModel, growth_rates::Array{Floa
     end
 
     # return -
-    return ll;
+    return total_log_likelihood;
 end

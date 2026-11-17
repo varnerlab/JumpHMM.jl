@@ -71,7 +71,7 @@ end
     _uniform_ranks(data::Array{Float64,2}) -> Array{Float64,2}
 
 Replace each column of `data` by its ranks divided by the number of rows plus one. The result is strictly between `0` and `1`
-and keeps only the order of the values in each column. (This was `_pit` in 0.4.1.)
+and keeps only the order of the values in each column.
 
 ### Arguments
 - `data::Array{Float64,2}`: The growth rates, one row per day and one column per asset
@@ -100,7 +100,6 @@ end
 
 Return a correlation matrix that can be factored. If `Σ` is already positive definite, we return it as a symmetric matrix.
 Otherwise we raise every eigenvalue below `tol` up to `tol` and rescale the matrix to a unit diagonal.
-(This was `_ensure_posdef` in 0.4.1.)
 
 ### Arguments
 - `Σ::Array{Float64,2}`: The correlation matrix to check
@@ -134,7 +133,7 @@ end
 
 Compute the log-likelihood of the uniform numbers `U` under a Student-t copula with correlation matrix `Σ` and `ν` degrees of
 freedom. Each row contributes the log of the joint Student-t density minus the log of the product of the marginal densities.
-We return `-Inf` if `Σ` cannot be inverted. (This was `_copula_loglik` in 0.4.1.)
+If `Σ` cannot be inverted, or the log-density cannot be evaluated for any other reason, the function returns `-Inf`.
 
 ### Arguments
 - `U::Array{Float64,2}`: The uniform numbers, one row per day and one column per asset
