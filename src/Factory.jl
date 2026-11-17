@@ -74,7 +74,10 @@ function build(model::Type{MyJumpHiddenMarkovModel}, data::NamedTuple)::MyJumpHi
         min_obs = data.min_obs;
     end
 
-    # check: the values are in range -
+    # check: number_of_states is an integer, and the values are in range -
+    if isa(number_of_states, Int64) == false
+        throw(ArgumentError("number_of_states must be an Int64, got $(number_of_states)"));
+    end
     if number_of_states < 1
         throw(ArgumentError("number_of_states must be at least 1, got $(number_of_states)"));
     end

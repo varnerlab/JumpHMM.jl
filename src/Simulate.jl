@@ -5,21 +5,22 @@
 Simulate synthetic growth rate paths from a jump hidden Markov model. Day 1 of each path starts in a state and emits a growth rate.
 Every later day is one of three kinds. On an ordinary day, the model moves to a new state using the transition matrix. On a jump day, the model
 jumps into one of the tail states. A jump episode starts with probability `ϵ` on a day and lasts a Poisson(`λ`) number of days.
+An episode length of zero means that day is an ordinary day. An episode that would run past the last day stops at the last day.
 
 ### Arguments
 - `model::MyJumpHiddenMarkovModel`: The model to simulate from
 - `number_of_steps::Int64`: The number of days in each path. Must be at least `1`
-
-### Optional Arguments
-- `number_of_paths::Int64`: The number of paths to simulate. Default: `1000`
-- `start::Union{Int64,Nothing}`: The state of day 1. If `nothing`, the start state is drawn from the stationary distribution. Default: `nothing`
-- `seed::Union{Int64,Nothing}`: The seed of the global random number generator. If `nothing`, the generator is not reseeded. Default: `nothing`
 
 ### Returns
 - `NamedTuple`: Three matrices with one row for each day and one column for each path.
     - `growth_rates::Array{Float64,2}`: The simulated growth rates
     - `states::Array{Int64,2}`: The state on each day
     - `episodes::Array{Bool,2}`: `true` if the day is part of a jump episode
+
+### Optional Arguments
+- `number_of_paths::Int64`: The number of paths to simulate. Default: `1000`
+- `start::Union{Int64,Nothing}`: The state of day 1. If `nothing`, the start state is drawn from the stationary distribution. Default: `nothing`
+- `seed::Union{Int64,Nothing}`: The seed of the global random number generator. If `nothing`, the generator is not reseeded. Default: `nothing`
 
 ### Example
 ```julia
@@ -50,11 +51,8 @@ function simulate(model::MyJumpHiddenMarkovModel, number_of_steps::Int64; number
     states = Array{Int64,2}(undef, number_of_steps, number_of_paths);
     episodes = Array{Bool,2}(undef, number_of_steps, number_of_paths);
 
-    # one sampler for each row of the transition matrix, and one for the stationary distribution -
-    row_samplers = Array{Categorical,1}(undef, number_of_states);
-    for s ∈ 1:number_of_states
-        row_samplers[s] = Categorical(model.transition[s, :]);
-    end
+    # row_samplers[s] draws the next state from row s of the transition matrix, and start_sampler draws a start state -
+    row_samplers = [Categorical(model.transition[s, :]) for s ∈ 1:number_of_states];
     start_sampler = Categorical(model.stationary);
 
     # the states a jump episode can reach: the lowest N_tail states and the highest N_tail states -

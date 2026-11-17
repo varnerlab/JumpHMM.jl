@@ -24,7 +24,7 @@ function score_candidate(paths::NamedTuple, acf_observed::Array{Float64,1}, κ_o
     total_score = 0.0;
     number_scored = 0;
 
-    # main loop: score each path that has at least one jump episode day -
+    # main loop - score each path that has at least one jump episode day -
     for p ∈ 1:number_of_paths
         if any(paths.episodes[:, p])
 
@@ -68,6 +68,9 @@ and return the first pair of the grid.
 - `model::MyJumpHiddenMarkovModel`: The model to tune. We copy it, and we do not change it
 - `growth_rates::Array{Float64,1}`: The growth rates of the data, for example from `excess_growth_rates`
 
+### Returns
+- `MyJumpHiddenMarkovModel`: A copy of `model` with the best `ϵ` and `λ`, and with `p_neg` and `N_tail` set to the arguments
+
 ### Optional Arguments
 - `ϵ_range`: The values of `ϵ`, the chance per day that a jump episode starts. Default: `range(1e-4, 2.5e-2, length = 20)`
 - `λ_range`: The values of `λ`, the mean length of a jump episode in days. Default: `range(10.0, 160.0, length = 16)`
@@ -78,9 +81,6 @@ and return the first pair of the grid.
 - `N_tail::Int64`: The number of states in each tail that a jump episode can reach. Default: `5`
 - `acf_lags::Int64`: The number of lags of the autocorrelation. We shorten it if the paths or the data are too short. Default: `25`
 - `seed::Union{Int64,Nothing}`: The seed of the global random number generator. If `nothing`, the generator is not reseeded. Default: `nothing`
-
-### Returns
-- `MyJumpHiddenMarkovModel`: A copy of `model` with the best `ϵ` and `λ`, and with `p_neg` and `N_tail` set to the arguments
 
 ### Example
 ```julia
@@ -117,7 +117,7 @@ function tune(model::MyJumpHiddenMarkovModel, growth_rates::Array{Float64,1}; ϵ
     best_ϵ = first(ϵ_range);
     best_λ = first(λ_range);
 
-    # main loop: try every pair, ϵ on the outside and λ on the inside -
+    # main loop - try every pair, ϵ on the outside and λ on the inside -
     for ϵ_candidate ∈ ϵ_range
         for λ_candidate ∈ λ_range
 

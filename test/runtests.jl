@@ -4,11 +4,10 @@ using Random
 using Statistics
 using LinearAlgebra
 
-# both bounds-checking modes are covered: each has its own frozen reference file
-
 # load the frozen 0.4.1 inputs and outputs -
 include(joinpath(@__DIR__, "equivalence", "helpers.jl"));
 inputs = load_inputs();
+# the loader picks the reference file that matches the bounds-checking mode of this run -
 reference = load_reference();
 
 # run every equivalence test file, then every unit test file -

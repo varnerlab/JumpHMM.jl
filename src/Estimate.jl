@@ -222,14 +222,13 @@ function estimate_emissions(states::Array{Int64,1}, growth_rates::Array{Float64,
             # enough growth rates: use the estimates of this state -
             μ_k = mean(growth_rates[indexes]);
             σ_k = std(growth_rates[indexes]);
+            μ[k] = μ_k;
             if σ_k < 1e-12
 
                 # all growth rates of this state are equal: borrow the global scale -
-                μ[k] = μ_k;
                 σ[k] = σ_global;
                 fallback[k] = true;
             else
-                μ[k] = μ_k;
                 σ[k] = σ_k;
                 fallback[k] = false;
             end

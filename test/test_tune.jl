@@ -15,4 +15,10 @@
     @test m.ϵ == 0.0
     @test m.λ == 1.0
     @test m.p_neg != 0.6
+
+    # a short number_of_steps clips acf_lags (default 25) to number_of_steps - 1 -
+    short = JumpHMM.tune(m, G; ϵ_range = [1e-2, 5e-2], λ_range = [10.0, 50.0], number_of_paths = 5, number_of_steps = 10, seed = 1)
+    @test short isa T
+    @test short.ϵ in [1e-2, 5e-2]
+    @test short.λ in [10.0, 50.0]
 end
