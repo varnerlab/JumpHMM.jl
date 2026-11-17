@@ -32,4 +32,7 @@ module JumpHMM
 
     # tune the jump settings -
     export tune
+
+    # validate a model against the data, and compare two samples -
+    export validate, wasserstein_distance, hellinger_distance
 end
