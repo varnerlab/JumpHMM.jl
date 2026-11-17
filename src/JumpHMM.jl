@@ -39,6 +39,9 @@ module JumpHMM
     # decode states, filter state probabilities, and compute the log-likelihood -
     export decode, forward_filter, log_likelihood
 
-    # draw dependent uniform numbers from a copula -
+    # draw dependent samples: uniform numbers from a copula, or growth rates from a dependence model -
     export sample_dependence
+
+    # draw and compose the paths of a sector factor model -
+    export sample_draws, compose, compose_name, with_parameters
 end

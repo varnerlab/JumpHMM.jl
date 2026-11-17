@@ -926,3 +926,316 @@ function build(model::Type{MyHybridSingleIndexDependenceModel}, data::NamedTuple
     # return -
     return m;
 end
+
+"""
+    build(model::Type{MySectorFactorModel}, data::NamedTuple) -> MySectorFactorModel
+
+Fit a sector factor model from a matrix of prices: `g_i(t) = α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i ε_i(t)`.
+We regress the growth rates of each asset on the growth rates of the market to get `α`, `β`, `r²`, and the residuals.
+The factor of a sector is the mean residual of its assets (`sector_factors`), and `δ` is the sector loading of each asset (`sector_loadings`).
+The own model of each asset is fit to its residual after the sector term (`own_residuals`).
+
+We build a hidden Markov model of the market prices, of each sector factor, and of each leftover residual. We fit the sector and
+own models to level series that start at `100.0` and compound the factor or residual, with `rf = 0`. The long-run mean
+`ε_center[i]` of own model `i` is the mean of one `center_steps`-day draw, seeded with `center_seed + i`. The scale `ψ` of each own draw
+follows from `own_variances` and the drift of `β` (`own_scale`).
+
+### Arguments
+- `model::Type{MySectorFactorModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `tickers::Array{String,1}`: The label of each column of `prices`. The list must include `market`
+    - `prices::Array{Float64,2}`: The prices, one row per day and one column per ticker
+    - `market::String`: The ticker of the market
+    - `sector::Array{String,1}`: The sector label of each asset, in the order of the tickers without the market. Every sector needs at least two assets
+    - `number_of_states::Int64`: The number of states of each hidden Markov model
+    - `ν::Float64`: The degrees of freedom of the Student-t emission distributions
+
+### Returns
+- `MySectorFactorModel`: The fitted model. The tickers of the model are the tickers without the market, in their original order
+
+### Optional Arguments
+The optional keys of `data` and their defaults are:
+- `rf::Float64`: The risk-free rate, per year, used for the growth rates of the prices. The default is `0.0`
+- `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
+- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. The default is `2`
+- `intercept_pull::Float64`: How much of its distance from the mean intercept each `α` keeps: `α = ᾱ + intercept_pull (α̂ - ᾱ)`. A value of `1.0` keeps the fitted intercepts, and `0.0` gives every asset the mean intercept. The default is `1.0`
+- `β_halflife::Float64`: The half-life of the drift of `β`, in trading days. The default is `126.0`
+- `β_scale::Union{Array{Float64,1},Nothing}`: The drift scale of `β` for each asset. If `nothing`, every scale is `0.0`, which keeps `β` fixed. The default is `nothing`
+- `center_steps::Int64`: The length of the draw that sets the long-run mean of each own model. The default is `1_000_000`
+- `center_seed::Int64`: The seed offset of the centering draws. Asset `i` uses `center_seed + i`. The default is `4 * 10^12`
+- `market_model::Union{MyJumpHiddenMarkovModel,Nothing}`: A market model to use instead of the one we would fit. The default is `nothing`
+- `sector_models::Union{Array{MyJumpHiddenMarkovModel,1},Nothing}`: The sector models to use instead of the ones we would fit, one per sector, in sorted label order. The default is `nothing`
+- `own_models::Union{Array{MyJumpHiddenMarkovModel,1},Nothing}`: The own models to use instead of the ones we would fit, one per asset, in asset order. We compute `ε_center` from the own models the model stores. The default is `nothing`
+
+### Example
+```julia
+model = JumpHMM.build(JumpHMM.MySectorFactorModel, (
+    tickers = tickers,
+    prices = P,
+    market = "SPY",
+    sector = sectors,
+    number_of_states = 20,
+    ν = 5.0
+));
+```
+"""
+function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFactorModel
+
+    # check: the required keys are present -
+    if haskey(data, :tickers) == false
+        throw(ArgumentError("tickers is required"));
+    end
+    if haskey(data, :prices) == false
+        throw(ArgumentError("prices is required"));
+    end
+    if haskey(data, :market) == false
+        throw(ArgumentError("market is required"));
+    end
+    if haskey(data, :sector) == false
+        throw(ArgumentError("sector is required"));
+    end
+    if haskey(data, :number_of_states) == false
+        throw(ArgumentError("number_of_states is required"));
+    end
+    if haskey(data, :ν) == false
+        throw(ArgumentError("ν is required"));
+    end
+    tickers = data.tickers;
+    prices = data.prices;
+    market = data.market;
+    sector = data.sector;
+    number_of_states = data.number_of_states;
+    ν = data.ν;
+
+    # set the optional keys to their defaults, then replace the ones that were given -
+    rf = 0.0;
+    Δt = 1/252;
+    min_obs = 2;
+    intercept_pull = 1.0;
+    β_halflife = 126.0;
+    β_scale = nothing;
+    center_steps = 1_000_000;
+    center_seed = 4 * 10^12;
+    market_model = nothing;
+    sector_models = nothing;
+    own_models = nothing;
+    if haskey(data, :rf) == true
+        rf = data.rf;
+    end
+    if haskey(data, :Δt) == true
+        Δt = data.Δt;
+    end
+    if haskey(data, :min_obs) == true
+        min_obs = data.min_obs;
+    end
+    if haskey(data, :intercept_pull) == true
+        intercept_pull = data.intercept_pull;
+    end
+    if haskey(data, :β_halflife) == true
+        β_halflife = data.β_halflife;
+    end
+    if haskey(data, :β_scale) == true
+        β_scale = data.β_scale;
+    end
+    if haskey(data, :center_steps) == true
+        center_steps = data.center_steps;
+    end
+    if haskey(data, :center_seed) == true
+        center_seed = data.center_seed;
+    end
+    if haskey(data, :market_model) == true
+        market_model = data.market_model;
+    end
+    if haskey(data, :sector_models) == true
+        sector_models = data.sector_models;
+    end
+    if haskey(data, :own_models) == true
+        own_models = data.own_models;
+    end
+
+    # check: the tickers match the columns, and the market is one of them -
+    number_of_columns = size(prices, 2);
+    if length(tickers) != number_of_columns
+        throw(ArgumentError("tickers has $(length(tickers)) labels but prices has $(number_of_columns) columns"));
+    end
+    market_index = 0;
+    for j ∈ 1:number_of_columns
+        if tickers[j] == market
+            market_index = j;
+            break;
+        end
+    end
+    if market_index == 0
+        throw(ArgumentError("the market ticker $(market) is not in tickers"));
+    end
+
+    # the assets are every column except the market -
+    asset_columns = Array{Int64,1}();
+    for j ∈ 1:number_of_columns
+        if j != market_index
+            push!(asset_columns, j);
+        end
+    end
+    asset_tickers = tickers[asset_columns];
+    number_of_assets = length(asset_tickers);
+
+    # check: one sector label and one drift scale per asset. No drift scales means zeros, a fixed β -
+    if length(sector) != number_of_assets
+        throw(ArgumentError("sector has $(length(sector)) labels but there are $(number_of_assets) assets"));
+    end
+    if isnothing(β_scale) == true
+        β_scale = zeros(number_of_assets);
+    end
+    if length(β_scale) != number_of_assets
+        throw(ArgumentError("β_scale has $(length(β_scale)) entries but there are $(number_of_assets) assets"));
+    end
+
+    # compute the growth rates of every column, then split off the market and the assets -
+    all_growth_rates = excess_growth_rates(prices; rf = rf, Δt = Δt);
+    market_growth_rates = all_growth_rates[:, market_index];
+    growth_rates = all_growth_rates[:, asset_columns];
+
+    # regress each asset on the market with ordinary least squares, and keep the residuals -
+    X = hcat(ones(length(market_growth_rates)), market_growth_rates);
+    α̂ = zeros(number_of_assets);
+    β̂ = zeros(number_of_assets);
+    r² = zeros(number_of_assets);
+    E = similar(growth_rates);
+    for i ∈ 1:number_of_assets
+        coefficients = X \ growth_rates[:, i];
+        α̂[i] = coefficients[1];
+        β̂[i] = coefficients[2];
+        E[:, i] = growth_rates[:, i] .- X * coefficients;
+        r²[i] = 1 - var(E[:, i]) / var(growth_rates[:, i]);
+    end
+
+    # the sector factors and loadings. These throw for a sector with one asset, or a covariance that is not positive -
+    sf = sector_factors(E, sector);
+    δ = sector_loadings(E, sector);
+
+    # the position of the sector of each asset in the sorted labels -
+    sector_index = zeros(Int64, number_of_assets);
+    for i ∈ 1:number_of_assets
+        for s ∈ eachindex(sf.sectors)
+            if sf.sectors[s] == sector[i]
+                sector_index[i] = s;
+            end
+        end
+    end
+
+    # the residual each asset has left after its sector term, and the variances that size its own draw -
+    U = own_residuals(E, sf.F, δ, sector_index);
+    variances = own_variances(E, sf.F, U, δ, sector_index; tickers = asset_tickers);
+    σ²_m = var(market_growth_rates);
+
+    # the intercepts, pulled toward their mean by intercept_pull -
+    ᾱ = mean(α̂);
+    α = ᾱ .+ intercept_pull .* (α̂ .- ᾱ);
+
+    # check: given models come one per asset and one per sector -
+    if isnothing(own_models) == false
+        if length(own_models) != number_of_assets
+            throw(ArgumentError("own_models has $(length(own_models)) models but there are $(number_of_assets) assets"));
+        end
+    end
+    if isnothing(sector_models) == false
+        if length(sector_models) != length(sf.sectors)
+            throw(ArgumentError("sector_models has $(length(sector_models)) models but there are $(length(sf.sectors)) sectors"));
+        end
+    end
+
+    # the market model: use the given one, or fit one to the market prices -
+    if isnothing(market_model) == true
+        market_model = build(MyJumpHiddenMarkovModel, (
+            growth_rates = excess_growth_rates(prices[:, market_index]; rf = rf, Δt = Δt),
+            number_of_states = number_of_states,
+            ν = ν,
+            Δt = Δt,
+            min_obs = min_obs
+        ));
+    end
+
+    # compound each sector factor into a level series that starts at 100.0. We fit each sector model to the growth rates of
+    # its level series. This round trip is redundant, but it keeps the numbers equal to the earlier version -
+    sector_levels = 100.0 .* exp.(vcat(zeros(1, size(sf.F, 2)), cumsum(sf.F .* Δt; dims = 1)));
+
+    # the sector models: copy the given list, or fit one model to each sector level series, with rf = 0 -
+    if isnothing(sector_models) == false
+        sector_models = copy(sector_models);
+    else
+        sector_models = Array{MyJumpHiddenMarkovModel,1}();
+        for s ∈ eachindex(sf.sectors)
+            sector_model = build(MyJumpHiddenMarkovModel, (
+                growth_rates = excess_growth_rates(sector_levels[:, s]; rf = 0.0, Δt = Δt),
+                number_of_states = number_of_states,
+                ν = ν,
+                Δt = Δt,
+                min_obs = min_obs
+            ));
+            push!(sector_models, sector_model);
+        end
+    end
+
+    # compound each leftover residual into a level series that starts at 100.0, the same way -
+    own_levels = 100.0 .* exp.(vcat(zeros(1, size(U, 2)), cumsum(U .* Δt; dims = 1)));
+
+    # the own models: copy the given list, or fit one model to each own level series, with rf = 0 -
+    if isnothing(own_models) == false
+        own_models = copy(own_models);
+    else
+        own_models = Array{MyJumpHiddenMarkovModel,1}();
+        for i ∈ 1:number_of_assets
+            own_model = build(MyJumpHiddenMarkovModel, (
+                growth_rates = excess_growth_rates(own_levels[:, i]; rf = 0.0, Δt = Δt),
+                number_of_states = number_of_states,
+                ν = ν,
+                Δt = Δt,
+                min_obs = min_obs
+            ));
+            push!(own_models, own_model);
+        end
+    end
+
+    # the long-run mean of each own model: the mean of one long draw, seeded with center_seed + i.
+    # We take the mean of the whole draw at once, so the sum adds in the same order as the earlier version -
+    ε_center = zeros(number_of_assets);
+    for i ∈ 1:number_of_assets
+        center_path = simulate(own_models[i], center_steps; number_of_paths = 1, seed = center_seed + i);
+        ε_center[i] = mean(center_path.growth_rates[:, 1]);
+    end
+
+    # the scale of each own draw under this drift of β -
+    ψ = zeros(number_of_assets);
+    for i ∈ 1:number_of_assets
+        σ²_drift = drift_variance(β_halflife, β_scale[i]) * σ²_m;
+        ψ[i] = own_scale(variances.σ²_own[i], variances.σ²_u[i], σ²_drift; ticker = asset_tickers[i]);
+    end
+
+    # build an empty model, then fill in the fields -
+    m = MySectorFactorModel();
+    m.tickers = asset_tickers;
+    m.sector = sector;
+    m.sectors = sf.sectors;
+    m.sector_index = sector_index;
+    m.α = α;
+    m.β = β̂;
+    m.δ = δ;
+    m.r² = r²;
+    m.ψ = ψ;
+    m.σ²_own = variances.σ²_own;
+    m.σ²_u = variances.σ²_u;
+    m.σ²_m = σ²_m;
+    m.ε_center = ε_center;
+    m.β_halflife = β_halflife;
+    m.β_scale = β_scale;
+    m.market_model = market_model;
+    m.sector_models = sector_models;
+    m.own_models = own_models;
+    m.sector_levels = sector_levels;
+    m.own_levels = own_levels;
+    m.center_steps = center_steps;
+    m.center_seed = center_seed;
+
+    # return -
+    return m;
+end
