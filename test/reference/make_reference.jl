@@ -566,6 +566,24 @@ function add_one_column!(ref::Dict{String,Any}, P::Matrix{Float64}, GA::Matrix{F
     add_portfolio_simulation!(ref, "hybrid_one/portfolio/simulate", simulate(p, 100; n_paths=2, seed=6))
 end
 
+"""
+    add_key_orders!(ref, P, tickers, sectors)
+
+The iteration order of the `marginals` and `tickers_map` dictionaries of the sector-factor, Gaussian-copula, and hybrid
+portfolios on all 13 tickers. The order of `marginals` sets which model draws first when a portfolio is tuned or validated
+without a seed. These keys hold no random numbers.
+"""
+function add_key_orders!(ref::Dict{String,Any}, P::Matrix{Float64}, tickers::Vector{String}, sectors::Vector{String})
+    ps = fit(PortfolioModel, tickers, P; dependence=SectorFactorModel, market="SPY", sectors=sectors, N=20,
+             sector_options=(center_steps=1000,))
+    pg = fit(PortfolioModel, tickers, P; dependence=GaussianCopula, N=20)
+    ph = fit(PortfolioModel, tickers, P; dependence=HybridSingleIndexModel, market="SPY", N=20)
+    for (name, p) in [("sector", ps), ("gauss", pg), ("hybrid", ph)]
+        ref["key_order/" * name * "/marginals"] = collect(keys(p.marginals))
+        ref["key_order/" * name * "/tickers_map"] = collect(keys(p.tickers_map))
+    end
+end
+
 # ---------------------------------------------------------------------------
 # The corrected Hellinger distance: 0.5.0 counts the largest observation
 # ---------------------------------------------------------------------------
@@ -712,6 +730,7 @@ function build_reference(inputs_path::String)
     add_once_seeded_portfolios!(ref, P, tickers)
     add_sector_dt_portfolio!(ref, P, tickers, sectors)
     add_one_column!(ref, P, GA, tickers)
+    add_key_orders!(ref, P, tickers, sectors)
     return ref
 end
 

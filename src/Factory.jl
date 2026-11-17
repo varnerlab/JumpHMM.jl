@@ -915,7 +915,7 @@ regress the growth rates of each asset on the growth rates of the market to get 
 
 ### Optional Arguments
 The optional keys of `data` and their defaults are:
-- `copula::Type`: The type of the copula fit to the residuals. Default: `MyStudentTCopulaModel`
+- `copula::Type`: The type of the copula fit to the residuals, a subtype of `AbstractDependenceModel` with `build` and `sample_dependence` methods. Default: `MyStudentTCopulaModel`
 - `rf::Float64`: The risk-free rate, per year. Default: `0.0`
 - `Δt::Float64`: The time step of the growth rates, in years. Default: `1/252`
 - `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. Default: `2`
@@ -1000,10 +1000,10 @@ function build(model::Type{MyHybridSingleIndexDependenceModel}, data::NamedTuple
     _check_type(:idiosyncratic_floor, idiosyncratic_floor, Float64);
     is_copula_type = false;
     if (isa(copula_type, Type) == true)
-        is_copula_type = (copula_type <: MyGaussianCopulaModel) || (copula_type <: MyStudentTCopulaModel) || (copula_type <: MyVineCopulaModel);
+        is_copula_type = (copula_type <: AbstractDependenceModel);
     end
     if (is_copula_type == false)
-        throw(ArgumentError("copula must be MyGaussianCopulaModel, MyStudentTCopulaModel, or MyVineCopulaModel, got $(copula_type)"));
+        throw(ArgumentError("copula must be a type that is a subtype of AbstractDependenceModel, such as MyStudentTCopulaModel, got $(copula_type)"));
     end
 
     # check: the tickers match the columns, and the market is one of them -
@@ -1582,8 +1582,9 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
         end
     end
 
-    # the column of each ticker in the price matrix -
+    # the column of each ticker in the price matrix. We size the dictionary before we fill it, because the order of its keys depends on its size -
     tickers_map = Dict{String,Int64}();
+    sizehint!(tickers_map, number_of_columns);
     for j ∈ 1:number_of_columns
         tickers_map[tickers[j]] = j;
     end
@@ -1686,7 +1687,11 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
             min_obs = min_obs
         ), sector_options);
         dependence_model = build(dependence, sector_data);
+
+        # the own model of each asset. We size the dictionary before we fill it, because the order of its keys sets which model
+        # draws first when the portfolio is tuned or validated without a seed -
         marginals = Dict{String,MyJumpHiddenMarkovModel}();
+        sizehint!(marginals, length(dependence_model.tickers));
         for i ∈ eachindex(dependence_model.tickers)
             marginals[dependence_model.tickers[i]] = dependence_model.own_models[i];
         end

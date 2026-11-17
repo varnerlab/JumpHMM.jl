@@ -117,3 +117,22 @@ end
     @test paths[tickers[2]].states == reference[prefix * "/states"]
     @test paths[tickers[2]].episodes == reference[prefix * "/episodes"]
 end
+
+@testset "portfolio dictionaries keep the key order of 0.4.1" begin
+    P = inputs["prices"]
+    tickers = inputs["tickers"]
+    T = JumpHMM.MyPortfolioModel
+    base = (tickers = tickers, prices = P, number_of_states = 20, ν = 5.0)
+
+    # the order of the marginals sets which model draws first when a portfolio is tuned or validated without a seed -
+    portfolios = [
+        ("sector", JumpHMM.build(T, merge(base, (dependence = JumpHMM.MySectorFactorModel, market = "SPY",
+            sector = inputs["sectors"], sector_options = (center_steps = 1000,))))),
+        ("gauss", JumpHMM.build(T, merge(base, (dependence = JumpHMM.MyGaussianCopulaModel,)))),
+        ("hybrid", JumpHMM.build(T, merge(base, (dependence = JumpHMM.MyHybridSingleIndexDependenceModel, market = "SPY")))),
+    ]
+    for (name, portfolio) ∈ portfolios
+        @test collect(keys(portfolio.marginals)) == reference["key_order/" * name * "/marginals"]
+        @test collect(keys(portfolio.tickers_map)) == reference["key_order/" * name * "/tickers_map"]
+    end
+end
