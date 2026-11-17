@@ -26,4 +26,7 @@ module JumpHMM
     export build
     export laplace_boundaries, assign_states, estimate_transition, stationary_distribution
     export estimate_emissions, sample_emission
+
+    # simulate synthetic growth rates -
+    export simulate
 end
