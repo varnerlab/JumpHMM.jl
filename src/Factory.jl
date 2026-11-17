@@ -138,3 +138,122 @@ function build(model::Type{MyJumpHiddenMarkovModel}, data::NamedTuple)::MyJumpHi
     # return -
     return m;
 end
+
+"""
+    build(model::Type{MyGaussianCopulaModel}, data::NamedTuple) -> MyGaussianCopulaModel
+
+Fit a Gaussian copula to the growth rates of several assets. We replace each column of growth rates by its ranks divided by the
+number of rows plus one, and take the correlation matrix of these uniform numbers.
+
+### Arguments
+- `model::Type{MyGaussianCopulaModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset. We need at least two columns, at least two rows, and every value must be finite
+
+### Returns
+- `MyGaussianCopulaModel`: The fitted copula
+
+### Example
+```julia
+copula = JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (growth_rates = R,));
+```
+"""
+function build(model::Type{MyGaussianCopulaModel}, data::NamedTuple)::MyGaussianCopulaModel
+
+    # check: the required key is present, and the matrix is usable -
+    if haskey(data, :growth_rates) == false
+        throw(ArgumentError("growth_rates is required"));
+    end
+    growth_rates = data.growth_rates;
+    _check_copula_growth_rates(growth_rates);
+
+    # estimate the correlation matrix of the uniform numbers -
+    U = _uniform_ranks(growth_rates);
+    Σ = _valid_correlation(cor(U));
+
+    # build an empty model, then fill in the fields -
+    m = MyGaussianCopulaModel();
+    m.Σ = Σ;
+
+    # return -
+    return m;
+end
+
+"""
+    build(model::Type{MyStudentTCopulaModel}, data::NamedTuple) -> MyStudentTCopulaModel
+
+Fit a Student-t copula to the growth rates of several assets. We estimate the correlation matrix as for the Gaussian copula.
+Then we pick the degrees of freedom from `3, 4, 5, 6, 7, 8, 10, 15, 20, 30` as the value with the largest log-likelihood.
+
+### Arguments
+- `model::Type{MyStudentTCopulaModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset. We need at least two columns, at least two rows, and every value must be finite
+
+### Returns
+- `MyStudentTCopulaModel`: The fitted copula
+
+### Example
+```julia
+copula = JumpHMM.build(JumpHMM.MyStudentTCopulaModel, (growth_rates = R,));
+```
+"""
+function build(model::Type{MyStudentTCopulaModel}, data::NamedTuple)::MyStudentTCopulaModel
+
+    # check: the required key is present, and the matrix is usable -
+    if haskey(data, :growth_rates) == false
+        throw(ArgumentError("growth_rates is required"));
+    end
+    growth_rates = data.growth_rates;
+    _check_copula_growth_rates(growth_rates);
+
+    # estimate the correlation matrix of the uniform numbers -
+    U = _uniform_ranks(growth_rates);
+    Σ = _valid_correlation(cor(U));
+
+    # pick the degrees of freedom with the largest log-likelihood -
+    best_ll = -Inf;
+    best_ν = 5.0;
+    for ν_candidate ∈ [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10.0, 15.0, 20.0, 30.0]
+        ll = _studentt_copula_loglik(U, Σ, ν_candidate);
+        if ll > best_ll
+            best_ll = ll;
+            best_ν = ν_candidate;
+        end
+    end
+
+    # build an empty model, then fill in the fields -
+    m = MyStudentTCopulaModel();
+    m.Σ = Σ;
+    m.ν = best_ν;
+
+    # return -
+    return m;
+end
+
+"""
+    _check_copula_growth_rates(growth_rates::Array{Float64,2})
+
+Throw an `ArgumentError` if the growth rates cannot be used to fit a copula: fewer than two columns, fewer than two rows,
+or a value that is not finite.
+
+### Arguments
+- `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset
+"""
+function _check_copula_growth_rates(growth_rates::Array{Float64,2})
+
+    # check: at least two assets and two days -
+    if size(growth_rates, 2) < 2
+        throw(ArgumentError("growth_rates must have at least two columns (assets)"));
+    end
+    if size(growth_rates, 1) < 2
+        throw(ArgumentError("growth_rates must have at least two rows (days)"));
+    end
+
+    # check: every value is finite -
+    for i ∈ eachindex(growth_rates)
+        if isfinite(growth_rates[i]) == false
+            throw(ArgumentError("every value in growth_rates must be finite"));
+        end
+    end
+end

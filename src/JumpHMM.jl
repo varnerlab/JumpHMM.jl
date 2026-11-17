@@ -38,4 +38,7 @@ module JumpHMM
 
     # decode states, filter state probabilities, and compute the log-likelihood -
     export decode, forward_filter, log_likelihood
+
+    # draw dependent uniform numbers from a copula -
+    export sample_dependence
 end
