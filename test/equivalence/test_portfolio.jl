@@ -38,14 +38,82 @@ end
         @test paths[ticker].episodes == reference["portfolio_gauss/simulate/" * ticker * "/episodes"]
     end
 
-    # validate -
+    # validate. The Hellinger fields are compared with the corrected 0.4.1 keys (see test_report_equals_reference) -
     reports = JumpHMM.validate(pg, P; number_of_paths = 3, seed = 18)
     for ticker ∈ tickers
-        report = reports[ticker]
-        @test report isa JumpHMM.MyValidationReportModel
-        for name ∈ ["ks_pvalue", "ad_pvalue", "wasserstein", "hellinger", "acf_mae", "kurtosis_sim", "kurtosis_emp",
-            "ks_pass_rate", "ad_pass_rate", "mean_acf_mae", "mean_wasserstein", "mean_hellinger", "mean_kurtosis", "α"]
-            @test getfield(report, Symbol(name)) == reference["portfolio_gauss/validate/" * ticker * "/" * name]
-        end
+        @test reports[ticker] isa JumpHMM.MyValidationReportModel
+        test_report_equals_reference(reports[ticker], "portfolio_gauss/validate/" * ticker)
     end
+end
+
+@testset "portfolios seeded once equal 0.4.1" begin
+    P = inputs["prices"][1:301, :]
+    tickers = inputs["tickers"]
+    ϵ_range = [0.01, 0.05]
+    λ_range = [2.0, 10.0]
+
+    # a Gaussian copula portfolio: one Random.seed! and no seed keyword, so the order in which we visit the models sets the draws -
+    pg = JumpHMM.build(JumpHMM.MyPortfolioModel, (
+        tickers = tickers, prices = P, dependence = JumpHMM.MyGaussianCopulaModel, number_of_states = 10, ν = 5.0))
+    Random.seed!(7)
+    tuned = JumpHMM.tune(pg, P; ϵ_range = ϵ_range, λ_range = λ_range, number_of_paths = 3, number_of_steps = 80)
+    for ticker ∈ tickers
+        @test tuned.marginals[ticker].ϵ == reference["portfolio_once/gauss/tune/" * ticker * "/ϵ"]
+        @test tuned.marginals[ticker].λ == reference["portfolio_once/gauss/tune/" * ticker * "/λ"]
+    end
+    Random.seed!(7)
+    reports = JumpHMM.validate(pg, P; number_of_paths = 1)
+    for ticker ∈ tickers
+        test_report_equals_reference(reports[ticker], "portfolio_once/gauss/validate/" * ticker)
+    end
+
+    # a hybrid portfolio: the portfolio marginals, then the market, then the hybrid model's own marginals -
+    ph = JumpHMM.build(JumpHMM.MyPortfolioModel, (
+        tickers = tickers[1:5], prices = P[:, 1:5], dependence = JumpHMM.MyHybridSingleIndexDependenceModel,
+        market = "SPY", number_of_states = 10, ν = 5.0))
+    Random.seed!(7)
+    th = JumpHMM.tune(ph, P[:, 1:5]; ϵ_range = ϵ_range, λ_range = λ_range, number_of_paths = 3, number_of_steps = 80)
+    for ticker ∈ ph.tickers
+        @test th.marginals[ticker].ϵ == reference["portfolio_once/hybrid/tune/marginals/" * ticker * "/ϵ"]
+        @test th.marginals[ticker].λ == reference["portfolio_once/hybrid/tune/marginals/" * ticker * "/λ"]
+        @test th.dependence.marginals[ticker].ϵ == reference["portfolio_once/hybrid/tune/dependence/" * ticker * "/ϵ"]
+        @test th.dependence.marginals[ticker].λ == reference["portfolio_once/hybrid/tune/dependence/" * ticker * "/λ"]
+    end
+    @test th.dependence.market_model.ϵ == reference["portfolio_once/hybrid/tune/market/ϵ"]
+    @test th.dependence.market_model.λ == reference["portfolio_once/hybrid/tune/market/λ"]
+end
+
+@testset "sector portfolio with a monthly time step equals 0.4.1" begin
+    P = inputs["prices"]
+
+    # the time step in sector_options is the one the portfolio stores and validates with -
+    ps = JumpHMM.build(JumpHMM.MyPortfolioModel, (
+        tickers = inputs["tickers"], prices = P, dependence = JumpHMM.MySectorFactorModel, market = "SPY",
+        sector = inputs["sectors"], number_of_states = 20, ν = 5.0, sector_options = (Δt = 1/12, center_steps = 1000)))
+    @test ps.Δt == 1/12
+    reports = JumpHMM.validate(ps, P; number_of_paths = 1, seed = 7)
+    for ticker ∈ ["ADP", "AFL"]
+        test_report_equals_reference(reports[ticker], "portfolio_sector_dt/validate/" * ticker)
+    end
+end
+
+@testset "hybrid portfolio of the market and one stock equals 0.4.1" begin
+    P = inputs["prices"][:, 1:2]
+    tickers = inputs["tickers"][1:2]
+
+    # the hybrid model on its own -
+    h = JumpHMM.build(JumpHMM.MyHybridSingleIndexDependenceModel, (
+        tickers = tickers, prices = P, market = "SPY", number_of_states = 20, ν = 5.0))
+    Random.seed!(5)
+    @test JumpHMM.sample_dependence(h, 100) == reference["hybrid_one/sample"]
+
+    # the same model in a portfolio -
+    p = JumpHMM.build(JumpHMM.MyPortfolioModel, (
+        tickers = tickers, prices = P, dependence = JumpHMM.MyHybridSingleIndexDependenceModel, market = "SPY",
+        number_of_states = 20, ν = 5.0))
+    paths = JumpHMM.simulate(p, 100; number_of_paths = 2, seed = 6)
+    prefix = "hybrid_one/portfolio/simulate/" * tickers[2]
+    @test paths[tickers[2]].growth_rates == reference[prefix * "/growth_rates"]
+    @test paths[tickers[2]].states == reference[prefix * "/states"]
+    @test paths[tickers[2]].episodes == reference[prefix * "/episodes"]
 end

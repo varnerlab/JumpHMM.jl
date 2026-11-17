@@ -10,8 +10,8 @@ Compute the annualized excess growth rates of a price series: `(1/Δt) * ln(P[t+
 - `Array{Float64,1}`: The growth rates. The array has one fewer element than `prices`
 
 ### Optional Arguments
-- `rf::Float64`: The risk-free rate, in 1/year. The default is `0.0`
-- `Δt::Float64`: The time step, in years. The default is `1/252`
+- `rf::Float64`: The risk-free rate, in 1/year. Default: `0.0`
+- `Δt::Float64`: The time step, in years. Default: `1/252`
 
 ### Example
 ```julia
@@ -45,8 +45,8 @@ Compute the annualized excess growth rates of each column of a price matrix.
 - `Array{Float64,2}`: The growth rates. The array has one fewer row than `prices`
 
 ### Optional Arguments
-- `rf::Float64`: The risk-free rate, in 1/year. The default is `0.0`
-- `Δt::Float64`: The time step, in years. The default is `1/252`
+- `rf::Float64`: The risk-free rate, in 1/year. Default: `0.0`
+- `Δt::Float64`: The time step, in years. Default: `1/252`
 
 ### Example
 ```julia
@@ -84,9 +84,9 @@ Compute the annualized excess growth rates of the tickers in a dictionary of pri
 - `Array{Float64,2}`: The growth rates. The array has one fewer row than each price table
 
 ### Optional Arguments
-- `rf::Float64`: The risk-free rate, in 1/year. The default is `0.0`
-- `Δt::Float64`: The time step, in years. The default is `1/252`
-- `price_col::Symbol`: The column of each table that holds the prices. The default is `:close`
+- `rf::Float64`: The risk-free rate, in 1/year. Default: `0.0`
+- `Δt::Float64`: The time step, in years. Default: `1/252`
+- `price_col::Symbol`: The column of each table that holds the prices. Default: `:close`
 
 ### Example
 ```julia
@@ -124,8 +124,8 @@ Rebuild a price series from excess growth rates and the first price.
 - `Array{Float64,1}`: The prices. The array has one more element than `growth_rates`
 
 ### Optional Arguments
-- `rf::Float64`: The risk-free rate, in 1/year. The default is `0.0`
-- `Δt::Float64`: The time step, in years. The default is `1/252`
+- `rf::Float64`: The risk-free rate, in 1/year. Default: `0.0`
+- `Δt::Float64`: The time step, in years. Default: `1/252`
 
 ### Example
 ```julia

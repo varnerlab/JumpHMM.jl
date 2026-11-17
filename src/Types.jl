@@ -28,6 +28,20 @@ Supertype for the models that hold the results of a validation run.
 """
 abstract type AbstractReportModel end
 
+"""
+    abstract type AbstractVineEdgeModel
+
+Supertype for the edges of a vine copula. Each edge links two assets through a bivariate copula.
+"""
+abstract type AbstractVineEdgeModel end
+
+"""
+    abstract type AbstractPortfolioModel
+
+Supertype for the models of several assets that pair a hidden Markov model for each asset with a dependence model.
+"""
+abstract type AbstractPortfolioModel end
+
 # --- Jump hidden Markov model ------------------------------------------------------------------------------------------ #
 
 """
@@ -49,7 +63,7 @@ and a jump episode can move the asset into the tails.
 - `emission_n::Array{Int64,1}`: The number of observations used to estimate the emission of each state
 - `emission_fallback::Array{Bool,1}`: A flag that is `true` if a state uses the standard deviation of all growth rates, because the state had fewer than `min_obs` growth rates or a standard deviation below `1e-12`
 - `ν::Float64`: The degrees of freedom of the Student-t emission distributions
-- `ϵ::Float64`: The probability that a jump episode starts at a time step. A value of `0.0` means the model has no jumps
+- `ϵ::Float64`: The probability that a jump episode starts on a given day. A value of `0.0` means the model has no jumps
 - `λ::Float64`: The mean of the Poisson episode length, in trading days
 - `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail
 - `N_tail::Int64`: The number of states in each tail that a jump episode can reach
@@ -253,7 +267,7 @@ end
 # --- Vine copula ------------------------------------------------------------------------------------------------------- #
 
 """
-    mutable struct MyVineEdgeModel
+    mutable struct MyVineEdgeModel <: AbstractVineEdgeModel
 
 The `MyVineEdgeModel` mutable struct holds one edge of a vine copula. The edge links two assets, given the conditioned assets, through a bivariate copula.
 
@@ -263,7 +277,7 @@ The `MyVineEdgeModel` mutable struct holds one edge of a vine copula. The edge l
 - `conditioned::Array{Int64,1}`: The indices of the assets that the edge is conditioned on
 - `copula::AbstractBivariateCopulaModel`: The bivariate copula of the edge
 """
-mutable struct MyVineEdgeModel
+mutable struct MyVineEdgeModel <: AbstractVineEdgeModel
 
     # data -
     first::Int64
@@ -370,6 +384,9 @@ The `MySectorFactorModel` mutable struct holds a model with one market model, on
 The own model of an asset is fit to the residual of the single-index fit after the sector term.
 The assets are linked only through the market draw and the sector draw on the same day.
 
+To change the intercepts or the drift of `β`, use `with_parameters`. After changing the market model, a sector model, or an own model,
+call `build` again with the keys `market_model`, `sector_models`, and `own_models`, so that `ε_center` and `ψ` are computed from the changed models.
+
 ### Required fields
 - `tickers::Array{String,1}`: The assets, without the market, in fit order
 - `sector::Array{String,1}`: The sector label of each asset
@@ -379,7 +396,7 @@ The assets are linked only through the market draw and the sector draw on the sa
 - `β::Array{Float64,1}`: The sensitivity of each asset to the market from the single-index fit
 - `δ::Array{Float64,1}`: The sector loading of each asset
 - `r²::Array{Float64,1}`: The R² of the single-index fit of each asset
-- `ψ::Array{Float64,1}`: The scale of the own draw of each asset
+- `ψ::Array{Float64,1}`: The scale of the own draw of each asset, computed by `build` and `with_parameters`. Editing `ψ` by hand has no effect, because `compose_name` computes the scale again from the variances
 - `σ²_own::Array{Float64,1}`: The residual variance left to the own term of each asset
 - `σ²_u::Array{Float64,1}`: The variance of the training series of each own model
 - `σ²_m::Float64`: The variance of the growth rate of the market over the fit window
@@ -427,7 +444,7 @@ end
 # --- Portfolio --------------------------------------------------------------------------------------------------------- #
 
 """
-    mutable struct MyPortfolioModel
+    mutable struct MyPortfolioModel <: AbstractPortfolioModel
 
 The `MyPortfolioModel` mutable struct holds a model of several assets: one hidden Markov model for each asset and a dependence model that links the assets.
 
@@ -440,7 +457,7 @@ The `MyPortfolioModel` mutable struct holds a model of several assets: one hidde
 - `rf::Float64`: The risk-free rate, in 1/year
 - `Δt::Float64`: The time step of the growth rates, in years
 """
-mutable struct MyPortfolioModel
+mutable struct MyPortfolioModel <: AbstractPortfolioModel
 
     # data -
     tickers::Array{String,1}

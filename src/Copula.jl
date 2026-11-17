@@ -68,6 +68,44 @@ function sample_dependence(model::MyStudentTCopulaModel, number_of_steps::Int64)
 end
 
 """
+    _check_copula_growth_rates(growth_rates::Array{Float64,2})
+
+Throw an `ArgumentError` if the growth rates cannot be used to fit a copula: no column, fewer than two rows, or a value that is not finite.
+One column is allowed. It gives a copula of one asset, and a vine copula with no edges.
+
+### Arguments
+- `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset
+
+### Returns
+- `Nothing`: The function returns `nothing` if the growth rates can be used
+
+### Example
+```julia
+JumpHMM._check_copula_growth_rates([0.5 -0.2; 0.1 0.3; -0.4 0.2]); # no error
+```
+"""
+function _check_copula_growth_rates(growth_rates::Array{Float64,2})::Nothing
+
+    # check: at least one asset and two days -
+    if size(growth_rates, 2) < 1
+        throw(ArgumentError("growth_rates must have at least one column (asset), got $(size(growth_rates, 2))"));
+    end
+    if size(growth_rates, 1) < 2
+        throw(ArgumentError("growth_rates must have at least two rows (days), got $(size(growth_rates, 1))"));
+    end
+
+    # check: every value is finite -
+    for i ∈ eachindex(growth_rates)
+        if isfinite(growth_rates[i]) == false
+            throw(ArgumentError("every value in growth_rates must be finite"));
+        end
+    end
+
+    # return -
+    return nothing;
+end
+
+"""
     _uniform_ranks(data::Array{Float64,2}) -> Array{Float64,2}
 
 Replace each column of `data` by its ranks divided by the number of rows plus one. The result is strictly between `0` and `1`
@@ -78,6 +116,11 @@ and keeps only the order of the values in each column.
 
 ### Returns
 - `Array{Float64,2}`: The uniform numbers, with the same size as `data`
+
+### Example
+```julia
+U = JumpHMM._uniform_ranks([0.5 -0.2; 0.1 0.3; -0.4 0.2]); # [3/4 1/4; 2/4 3/4; 1/4 2/4]
+```
 """
 function _uniform_ranks(data::Array{Float64,2})::Array{Float64,2}
 
@@ -108,7 +151,12 @@ Otherwise we raise every eigenvalue below `tol` up to `tol` and rescale the matr
 - `Array{Float64,2}`: A symmetric, positive definite correlation matrix
 
 ### Optional Arguments
-- `tol::Float64`: The smallest eigenvalue to keep. The default is `1e-8`
+- `tol::Float64`: The smallest eigenvalue to keep. Default: `1e-8`
+
+### Example
+```julia
+Σ = JumpHMM._valid_correlation([1.0 0.99 0.0; 0.99 1.0 0.99; 0.0 0.99 1.0]);
+```
 """
 function _valid_correlation(Σ::Array{Float64,2}; tol::Float64 = 1e-8)::Array{Float64,2}
 
@@ -142,6 +190,12 @@ If `Σ` cannot be inverted, or the log-density cannot be evaluated for any other
 
 ### Returns
 - `Float64`: The log-likelihood
+
+### Example
+```julia
+U = JumpHMM._uniform_ranks(GA[:, 2:3]);
+ll = JumpHMM._studentt_copula_loglik(U, [1.0 0.5; 0.5 1.0], 5.0);
+```
 """
 function _studentt_copula_loglik(U::Array{Float64,2}, Σ::Array{Float64,2}, ν::Float64)::Float64
 

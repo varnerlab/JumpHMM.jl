@@ -722,6 +722,9 @@ Make a new sector factor model with new intercepts `α`, a new half-life of the 
 own scales `ψ` for the new drift (`own_scales`). The new model shares every other field with `model`, including the fitted hidden
 Markov models and the level series. Changing one of those shared fields in place changes both models. The input model is not changed.
 
+Make a `deepcopy` of `model` before a study that edits its fitted hidden Markov models. After such an edit, call `build` again with the keys
+`market_model`, `sector_models`, and `own_models`, so that `ε_center` and `ψ` are computed from the changed models.
+
 ### Arguments
 - `model::MySectorFactorModel`: The sector factor model
 

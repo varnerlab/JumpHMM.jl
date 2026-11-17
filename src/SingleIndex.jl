@@ -55,7 +55,7 @@ Simulate synthetic growth rates for the assets of a hybrid single-index model. W
 of each asset, and drop the first day of every path. We scale the path of each asset into its idiosyncratic part, and reorder that part so that
 its ranks follow the ranks of a draw from the copula. Then we compute `g_i = α_i + β_i g_m + ε_i`.
 
-If `r²` of an asset is at least `r2_preserve_threshold`, we scale the path so that the R² of the simulated asset equals `r²`.
+If `r²` of an asset is at least `r2_preserve_threshold`, we set the variance of the scaled path from the variance of the market in the data, so that the expected R² of the simulated asset matches `r²`.
 Otherwise, we scale the path to keep the variance of the hidden Markov model of the asset, and we lower `β` if the market part would take
 more than `1 - idiosyncratic_floor` of that variance.
 

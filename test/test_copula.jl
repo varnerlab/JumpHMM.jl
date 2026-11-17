@@ -11,8 +11,17 @@
         @test size(U) == (50, 4)
         @test all(0.0 .< U .< 1.0)
     end
-    @test_throws ArgumentError JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (growth_rates = R[:, 1:1],))
-    @test_throws ArgumentError JumpHMM.build(JumpHMM.MyStudentTCopulaModel, (growth_rates = R[:, 1:1],))
+    # one column gives a copula of one asset, and no column is rejected -
+    one_column = [JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (growth_rates = R[:, 1:1],)),
+                  JumpHMM.build(JumpHMM.MyStudentTCopulaModel, (growth_rates = R[:, 1:1],))]
+    for m ∈ one_column
+        @test m.Σ == ones(1, 1)
+        U = JumpHMM.sample_dependence(m, 50)
+        @test size(U) == (50, 1)
+        @test all(0.0 .< U .< 1.0)
+    end
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (growth_rates = R[:, 1:0],))
+    @test_throws ArgumentError JumpHMM.build(JumpHMM.MyStudentTCopulaModel, (growth_rates = R[:, 1:0],))
     @test_throws ArgumentError JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (growth_rates = R[1:1, :],))
     @test_throws ArgumentError JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (growth_rates = fill(NaN, 5, 2),))
     @test_throws ArgumentError JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (returns = R,))

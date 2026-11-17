@@ -1,4 +1,109 @@
 """
+    _check_keys(data::NamedTuple, allowed::Array{Symbol,1}, model::Type)
+
+Throw an `ArgumentError` if `data` has a key that is not in `allowed`. The message names the unknown key and lists the allowed keys.
+If the unknown key is the Greek letter `ε` (U+03B5) and `ϵ` (U+03F5) is an allowed key, the message says that the probability that a jump
+episode starts on a given day is `ϵ`, typed `\\epsilon`.
+
+### Arguments
+- `data::NamedTuple`: The inputs of a `build` call
+- `allowed::Array{Symbol,1}`: The keys that the `build` method reads
+- `model::Type`: The type that the `build` method makes. We name it in the message
+
+### Returns
+- `Nothing`: The function returns `nothing` if every key is allowed
+
+### Example
+```julia
+JumpHMM._check_keys((ρ = 0.5,), [:ρ], JumpHMM.MyGaussianBivariateCopulaModel); # no error
+```
+"""
+function _check_keys(data::NamedTuple, allowed::Array{Symbol,1}, model::Type)::Nothing
+
+    # main loop - check each key of data against the allowed keys -
+    for key ∈ keys(data)
+        if (key ∈ allowed) == false
+
+            # the list of allowed keys for the message -
+            allowed_list = join(string.(allowed), ", ");
+
+            # the Greek letter ε looks like ϵ, so we point to the key the caller meant -
+            if (key == :ε && (:ϵ ∈ allowed) == true)
+                throw(ArgumentError("build($(nameof(model))) has no key ε (U+03B5). The probability that a jump episode starts on a given day is ϵ (U+03F5), typed \\epsilon. The allowed keys are $(allowed_list)"));
+            end
+            throw(ArgumentError("build($(nameof(model))) has no key $(key). The allowed keys are $(allowed_list)"));
+        end
+    end
+
+    # return -
+    return nothing;
+end
+
+"""
+    _check_type(name::Symbol, value::Any, expected::Type)
+
+Throw an `ArgumentError` if `value` is not of type `expected`. The message names the key and gives the type of the value.
+We use it in `build`, so that a wrong type is rejected before any fitting starts.
+
+### Arguments
+- `name::Symbol`: The name of the key, used in the message
+- `value::Any`: The value of the key
+- `expected::Type`: The type the value must have
+
+### Returns
+- `Nothing`: The function returns `nothing` if `value` has the type `expected`
+
+### Example
+```julia
+JumpHMM._check_type(:ν, 5.0, Float64); # no error
+```
+"""
+function _check_type(name::Symbol, value::Any, expected::Type)::Nothing
+
+    # check: the value has the type we need -
+    if (isa(value, expected) == false)
+        throw(ArgumentError("$(name) must be of type $(expected), got a value of type $(typeof(value))"));
+    end
+
+    # return -
+    return nothing;
+end
+
+"""
+    _market_index(tickers::Array{String,1}, market::String) -> Int64
+
+Find the position of the market ticker in `tickers`. We return `0` if `market` is not in `tickers`.
+
+### Arguments
+- `tickers::Array{String,1}`: The tickers, one for each column of the prices
+- `market::String`: The ticker of the market
+
+### Returns
+- `Int64`: The position of `market` in `tickers`, or `0` if `market` is not in `tickers`
+
+### Example
+```julia
+j = JumpHMM._market_index(["SPY", "JPM", "XOM"], "SPY"); # 1
+```
+"""
+function _market_index(tickers::Array{String,1}, market::String)::Int64
+
+    # initialize - 0 means not found -
+    market_index = 0;
+
+    # main loop - stop at the first ticker that matches -
+    for j ∈ eachindex(tickers)
+        if (tickers[j] == market)
+            market_index = j;
+            break;
+        end
+    end
+
+    # return -
+    return market_index;
+end
+
+"""
     build(model::Type{MyJumpHiddenMarkovModel}, data::NamedTuple) -> MyJumpHiddenMarkovModel
 
 Estimate a hidden Markov model of the growth rates of one asset. We cut the growth rates into states,
@@ -9,19 +114,21 @@ count the moves between states, estimate the emission distribution of each state
 - `data::NamedTuple`: The inputs. The required keys are:
     - `growth_rates::Array{Float64,1}`: The growth rates, at least two finite values that are not all equal
     - `number_of_states::Int64`: The number of states, at least `1`
-    - `ν::Float64`: The degrees of freedom of the Student-t emission distributions
+    - `ν::Float64`: The degrees of freedom of the Student-t emission distributions, above `0`
 
 ### Returns
 - `MyJumpHiddenMarkovModel`: The estimated model
 
 ### Optional Arguments
 The optional keys of `data` and their defaults are:
-- `ϵ::Float64`: The probability that a jump episode starts at a time step, between `0` and `1`. The default is `0.0`, which means no jumps
-- `λ::Float64`: The mean of the Poisson episode length, in trading days, above `0`. The default is `1.0`
-- `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail, between `0` and `1`. The default is `0.52`
-- `N_tail::Int64`: The number of states in each tail that a jump episode can reach, at least `1`. The default is `5`
-- `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
-- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. The default is `2`
+- `ϵ::Float64`: The probability that a jump episode starts on a given day, between `0` and `1`. A value of `0.0` means no jumps. Default: `0.0`
+- `λ::Float64`: The mean of the Poisson episode length, in trading days, above `0`. Default: `1.0`
+- `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail, between `0` and `1`. Default: `0.52`
+- `N_tail::Int64`: The number of states in each tail that a jump episode can reach, at least `1`. Default: `5`
+- `Δt::Float64`: The time step of the growth rates, in years. Default: `1/252`
+- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. Default: `2`
+
+Any other key throws an `ArgumentError`. Each key must have the type shown. For example, write `ν = 5.0`, not `ν = 5`.
 
 ### Example
 ```julia
@@ -33,6 +140,9 @@ model = JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (
 ```
 """
 function build(model::Type{MyJumpHiddenMarkovModel}, data::NamedTuple)::MyJumpHiddenMarkovModel
+
+    # check: every key is one we know -
+    _check_keys(data, [:growth_rates, :number_of_states, :ν, :ϵ, :λ, :p_neg, :N_tail, :Δt, :min_obs], model);
 
     # check: the required keys are present -
     if haskey(data, :growth_rates) == false
@@ -74,23 +184,34 @@ function build(model::Type{MyJumpHiddenMarkovModel}, data::NamedTuple)::MyJumpHi
         min_obs = data.min_obs;
     end
 
-    # check: number_of_states is an integer, and the values are in range -
-    if isa(number_of_states, Int64) == false
-        throw(ArgumentError("number_of_states must be an Int64, got $(number_of_states)"));
-    end
-    if number_of_states < 1
+    # check: each value has the type we need -
+    _check_type(:growth_rates, growth_rates, Array{Float64,1});
+    _check_type(:number_of_states, number_of_states, Int64);
+    _check_type(:ν, ν, Float64);
+    _check_type(:ϵ, ϵ, Float64);
+    _check_type(:λ, λ, Float64);
+    _check_type(:p_neg, p_neg, Float64);
+    _check_type(:N_tail, N_tail, Int64);
+    _check_type(:Δt, Δt, Float64);
+    _check_type(:min_obs, min_obs, Int64);
+
+    # check: the values are in range. Each comparison is false for NaN, so a NaN value is rejected -
+    if (number_of_states >= 1) == false
         throw(ArgumentError("number_of_states must be at least 1, got $(number_of_states)"));
     end
-    if ϵ < 0.0 || ϵ > 1.0
+    if (ν > 0.0) == false
+        throw(ArgumentError("ν must be greater than 0, got $(ν)"));
+    end
+    if (ϵ >= 0.0 && ϵ <= 1.0) == false
         throw(ArgumentError("ϵ must be between 0 and 1, got $(ϵ)"));
     end
-    if λ <= 0.0
+    if (λ > 0.0) == false
         throw(ArgumentError("λ must be greater than 0, got $(λ)"));
     end
-    if p_neg < 0.0 || p_neg > 1.0
+    if (p_neg >= 0.0 && p_neg <= 1.0) == false
         throw(ArgumentError("p_neg must be between 0 and 1, got $(p_neg)"));
     end
-    if N_tail < 1
+    if (N_tail >= 1) == false
         throw(ArgumentError("N_tail must be at least 1, got $(N_tail)"));
     end
     number_of_finite = 0;
@@ -148,7 +269,7 @@ number of rows plus one, and take the correlation matrix of these uniform number
 ### Arguments
 - `model::Type{MyGaussianCopulaModel}`: The type to build
 - `data::NamedTuple`: The inputs. The required keys are:
-    - `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset. We need at least two columns, at least two rows, and every value must be finite
+    - `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset. We need at least one column, at least two rows, and every value must be finite
 
 ### Returns
 - `MyGaussianCopulaModel`: The fitted copula
@@ -160,11 +281,15 @@ copula = JumpHMM.build(JumpHMM.MyGaussianCopulaModel, (growth_rates = R,));
 """
 function build(model::Type{MyGaussianCopulaModel}, data::NamedTuple)::MyGaussianCopulaModel
 
+    # check: every key is one we know -
+    _check_keys(data, [:growth_rates], model);
+
     # check: the required key is present, and the matrix is usable -
     if haskey(data, :growth_rates) == false
         throw(ArgumentError("growth_rates is required"));
     end
     growth_rates = data.growth_rates;
+    _check_type(:growth_rates, growth_rates, Array{Float64,2});
     _check_copula_growth_rates(growth_rates);
 
     # estimate the correlation matrix of the uniform numbers -
@@ -188,7 +313,7 @@ Then we pick the degrees of freedom from `3, 4, 5, 6, 7, 8, 10, 15, 20, 30` as t
 ### Arguments
 - `model::Type{MyStudentTCopulaModel}`: The type to build
 - `data::NamedTuple`: The inputs. The required keys are:
-    - `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset. We need at least two columns, at least two rows, and every value must be finite
+    - `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset. We need at least one column, at least two rows, and every value must be finite
 
 ### Returns
 - `MyStudentTCopulaModel`: The fitted copula
@@ -200,11 +325,15 @@ copula = JumpHMM.build(JumpHMM.MyStudentTCopulaModel, (growth_rates = R,));
 """
 function build(model::Type{MyStudentTCopulaModel}, data::NamedTuple)::MyStudentTCopulaModel
 
+    # check: every key is one we know -
+    _check_keys(data, [:growth_rates], model);
+
     # check: the required key is present, and the matrix is usable -
     if haskey(data, :growth_rates) == false
         throw(ArgumentError("growth_rates is required"));
     end
     growth_rates = data.growth_rates;
+    _check_type(:growth_rates, growth_rates, Array{Float64,2});
     _check_copula_growth_rates(growth_rates);
 
     # estimate the correlation matrix of the uniform numbers -
@@ -232,33 +361,6 @@ function build(model::Type{MyStudentTCopulaModel}, data::NamedTuple)::MyStudentT
 end
 
 """
-    _check_copula_growth_rates(growth_rates::Array{Float64,2})
-
-Throw an `ArgumentError` if the growth rates cannot be used to fit a copula: fewer than two columns, fewer than two rows,
-or a value that is not finite.
-
-### Arguments
-- `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset
-"""
-function _check_copula_growth_rates(growth_rates::Array{Float64,2})
-
-    # check: at least two assets and two days -
-    if size(growth_rates, 2) < 2
-        throw(ArgumentError("growth_rates must have at least two columns (assets)"));
-    end
-    if size(growth_rates, 1) < 2
-        throw(ArgumentError("growth_rates must have at least two rows (days)"));
-    end
-
-    # check: every value is finite -
-    for i ∈ eachindex(growth_rates)
-        if isfinite(growth_rates[i]) == false
-            throw(ArgumentError("every value in growth_rates must be finite"));
-        end
-    end
-end
-
-"""
     build(model::Type{MyGaussianBivariateCopulaModel}, data::NamedTuple) -> MyGaussianBivariateCopulaModel
 
 Build a Gaussian copula for two assets from its parameter.
@@ -278,15 +380,19 @@ copula = JumpHMM.build(JumpHMM.MyGaussianBivariateCopulaModel, (ρ = 0.5,));
 """
 function build(model::Type{MyGaussianBivariateCopulaModel}, data::NamedTuple)::MyGaussianBivariateCopulaModel
 
+    # check: every key is one we know -
+    _check_keys(data, [:ρ], model);
+
     # check: the required keys are present -
     if haskey(data, :ρ) == false
         throw(ArgumentError("ρ is required"));
     end
     ρ = data.ρ;
+    _check_type(:ρ, ρ, Float64);
 
     # check: the parameters are in range -
     if (ρ > -1.0 && ρ < 1.0) == false
-        throw(ArgumentError("ρ must be strictly between -1 and 1"));
+        throw(ArgumentError("ρ must be strictly between -1 and 1, got $(ρ)"));
     end
 
     # build an empty model, then fill in the fields -
@@ -318,6 +424,9 @@ copula = JumpHMM.build(JumpHMM.MyStudentTBivariateCopulaModel, (ρ = 0.5, ν = 5
 """
 function build(model::Type{MyStudentTBivariateCopulaModel}, data::NamedTuple)::MyStudentTBivariateCopulaModel
 
+    # check: every key is one we know -
+    _check_keys(data, [:ρ, :ν], model);
+
     # check: the required keys are present -
     if haskey(data, :ρ) == false
         throw(ArgumentError("ρ is required"));
@@ -327,13 +436,15 @@ function build(model::Type{MyStudentTBivariateCopulaModel}, data::NamedTuple)::M
     end
     ρ = data.ρ;
     ν = data.ν;
+    _check_type(:ρ, ρ, Float64);
+    _check_type(:ν, ν, Float64);
 
     # check: the parameters are in range -
     if (ρ > -1.0 && ρ < 1.0) == false
-        throw(ArgumentError("ρ must be strictly between -1 and 1"));
+        throw(ArgumentError("ρ must be strictly between -1 and 1, got $(ρ)"));
     end
     if (ν > 0.0) == false
-        throw(ArgumentError("ν must be above 0"));
+        throw(ArgumentError("ν must be above 0, got $(ν)"));
     end
 
     # build an empty model, then fill in the fields -
@@ -365,15 +476,19 @@ copula = JumpHMM.build(JumpHMM.MyClaytonBivariateCopulaModel, (θ = 2.0,));
 """
 function build(model::Type{MyClaytonBivariateCopulaModel}, data::NamedTuple)::MyClaytonBivariateCopulaModel
 
+    # check: every key is one we know -
+    _check_keys(data, [:θ], model);
+
     # check: the required keys are present -
     if haskey(data, :θ) == false
         throw(ArgumentError("θ is required"));
     end
     θ = data.θ;
+    _check_type(:θ, θ, Float64);
 
     # check: the parameters are in range -
     if (θ > 0.0) == false
-        throw(ArgumentError("θ must be above 0"));
+        throw(ArgumentError("θ must be above 0, got $(θ)"));
     end
 
     # build an empty model, then fill in the fields -
@@ -404,15 +519,19 @@ copula = JumpHMM.build(JumpHMM.MyGumbelBivariateCopulaModel, (θ = 2.0,));
 """
 function build(model::Type{MyGumbelBivariateCopulaModel}, data::NamedTuple)::MyGumbelBivariateCopulaModel
 
+    # check: every key is one we know -
+    _check_keys(data, [:θ], model);
+
     # check: the required keys are present -
     if haskey(data, :θ) == false
         throw(ArgumentError("θ is required"));
     end
     θ = data.θ;
+    _check_type(:θ, θ, Float64);
 
     # check: the parameters are in range -
     if (θ ≥ 1.0) == false
-        throw(ArgumentError("θ must be at least 1"));
+        throw(ArgumentError("θ must be at least 1, got $(θ)"));
     end
 
     # build an empty model, then fill in the fields -
@@ -443,15 +562,19 @@ copula = JumpHMM.build(JumpHMM.MyFrankBivariateCopulaModel, (θ = 3.0,));
 """
 function build(model::Type{MyFrankBivariateCopulaModel}, data::NamedTuple)::MyFrankBivariateCopulaModel
 
+    # check: every key is one we know -
+    _check_keys(data, [:θ], model);
+
     # check: the required keys are present -
     if haskey(data, :θ) == false
         throw(ArgumentError("θ is required"));
     end
     θ = data.θ;
+    _check_type(:θ, θ, Float64);
 
     # check: the parameters are in range -
     if isfinite(θ) == false
-        throw(ArgumentError("θ must be finite"));
+        throw(ArgumentError("θ must be finite, got $(θ)"));
     end
 
     # build an empty model, then fill in the fields -
@@ -485,6 +608,9 @@ edge = JumpHMM.build(JumpHMM.MyVineEdgeModel, (first = 1, second = 2, conditione
 """
 function build(model::Type{MyVineEdgeModel}, data::NamedTuple)::MyVineEdgeModel
 
+    # check: every key is one we know -
+    _check_keys(data, [:first, :second, :conditioned, :copula], model);
+
     # check: the required keys are present -
     if haskey(data, :first) == false
         throw(ArgumentError("first is required"));
@@ -498,6 +624,12 @@ function build(model::Type{MyVineEdgeModel}, data::NamedTuple)::MyVineEdgeModel
     if haskey(data, :copula) == false
         throw(ArgumentError("copula is required"));
     end
+
+    # check: each value has the type we need -
+    _check_type(:first, data.first, Int64);
+    _check_type(:second, data.second, Int64);
+    _check_type(:conditioned, data.conditioned, Array{Int64,1});
+    _check_type(:copula, data.copula, AbstractBivariateCopulaModel);
 
     # build an empty model, then fill in the fields -
     m = MyVineEdgeModel();
@@ -521,7 +653,7 @@ bivariate copula of each edge by AIC among the Gaussian, Student-t, Clayton, Gum
 ### Arguments
 - `model::Type{MyVineCopulaModel}`: The type to build
 - `data::NamedTuple`: The inputs. The required keys are:
-    - `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset. We need at least two columns, at least two rows, and every value must be finite
+    - `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset. We need at least one column, at least two rows, and every value must be finite
 
 ### Returns
 - `MyVineCopulaModel`: The fitted vine copula
@@ -533,11 +665,15 @@ vine = JumpHMM.build(JumpHMM.MyVineCopulaModel, (growth_rates = R,));
 """
 function build(model::Type{MyVineCopulaModel}, data::NamedTuple)::MyVineCopulaModel
 
+    # check: every key is one we know -
+    _check_keys(data, [:growth_rates], model);
+
     # check: the required key is present, and the matrix is usable -
     if haskey(data, :growth_rates) == false
         throw(ArgumentError("growth_rates is required"));
     end
     growth_rates = data.growth_rates;
+    _check_type(:growth_rates, growth_rates, Array{Float64,2});
     _check_copula_growth_rates(growth_rates);
 
     # initialize -
@@ -630,11 +766,11 @@ Fit a single-index model to the growth rates of several assets. For each asset, 
 
 ### Optional Arguments
 The optional keys of `data` and their defaults are:
-- `market_prices::Union{Array{Float64,1},Nothing}`: The prices of the market. If `nothing`, we rebuild prices from `market_growth_rates`, starting at `100.0`, and fit the market model to the growth rates of the rebuilt prices. The default is `nothing`
-- `rf::Float64`: The risk-free rate, per year. The default is `0.0`
-- `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
-- `min_obs::Int64`: The fewest growth rates a state of the market model needs to use its own emission estimates. The default is `2`
-- `residual_method::Symbol`: How `sample_dependence` draws the residuals, either `:bootstrap` or `:gaussian`. The default is `:bootstrap`
+- `market_prices::Union{Array{Float64,1},Nothing}`: The prices of the market. If `nothing`, we rebuild prices from `market_growth_rates`, starting at `100.0`, and fit the market model to the growth rates of the rebuilt prices. Default: `nothing`
+- `rf::Float64`: The risk-free rate, per year. Default: `0.0`
+- `Δt::Float64`: The time step of the growth rates, in years. Default: `1/252`
+- `min_obs::Int64`: The fewest growth rates a state of the market model needs to use its own emission estimates. Default: `2`
+- `residual_method::Symbol`: How `sample_dependence` draws the residuals, either `:bootstrap` or `:gaussian`. Default: `:bootstrap`
 
 ### Example
 ```julia
@@ -647,6 +783,10 @@ model = JumpHMM.build(JumpHMM.MySingleIndexDependenceModel, (
 ```
 """
 function build(model::Type{MySingleIndexDependenceModel}, data::NamedTuple)::MySingleIndexDependenceModel
+
+    # check: every key is one we know -
+    _check_keys(data, [:growth_rates, :market_growth_rates, :number_of_states, :ν, :market_prices, :rf, :Δt, :min_obs,
+        :residual_method], model);
 
     # check: the required keys are present -
     if haskey(data, :growth_rates) == false
@@ -687,6 +827,17 @@ function build(model::Type{MySingleIndexDependenceModel}, data::NamedTuple)::MyS
     if haskey(data, :residual_method) == true
         residual_method = data.residual_method;
     end
+
+    # check: each value has the type we need -
+    _check_type(:growth_rates, growth_rates, Array{Float64,2});
+    _check_type(:market_growth_rates, market_growth_rates, Array{Float64,1});
+    _check_type(:number_of_states, number_of_states, Int64);
+    _check_type(:ν, ν, Float64);
+    _check_type(:market_prices, market_prices, Union{Array{Float64,1},Nothing});
+    _check_type(:rf, rf, Float64);
+    _check_type(:Δt, Δt, Float64);
+    _check_type(:min_obs, min_obs, Int64);
+    _check_type(:residual_method, residual_method, Symbol);
 
     # check: the residual method is known, and the market matches the assets -
     if residual_method != :bootstrap && residual_method != :gaussian
@@ -764,12 +915,12 @@ regress the growth rates of each asset on the growth rates of the market to get 
 
 ### Optional Arguments
 The optional keys of `data` and their defaults are:
-- `copula::Type`: The type of the copula fit to the residuals. The default is `MyStudentTCopulaModel`
-- `rf::Float64`: The risk-free rate, per year. The default is `0.0`
-- `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
-- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. The default is `2`
-- `r2_preserve_threshold::Float64`: The R² at or above which the model keeps the R² of the asset. The default is `0.80`
-- `idiosyncratic_floor::Float64`: The smallest fraction of the variance of an asset that is idiosyncratic. The default is `0.10`
+- `copula::Type`: The type of the copula fit to the residuals. Default: `MyStudentTCopulaModel`
+- `rf::Float64`: The risk-free rate, per year. Default: `0.0`
+- `Δt::Float64`: The time step of the growth rates, in years. Default: `1/252`
+- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. Default: `2`
+- `r2_preserve_threshold::Float64`: The R² at or above which the model keeps the R² of the asset. Default: `0.80`
+- `idiosyncratic_floor::Float64`: The smallest fraction of the variance of an asset that is idiosyncratic. Default: `0.10`
 
 ### Example
 ```julia
@@ -783,6 +934,10 @@ model = JumpHMM.build(JumpHMM.MyHybridSingleIndexDependenceModel, (
 ```
 """
 function build(model::Type{MyHybridSingleIndexDependenceModel}, data::NamedTuple)::MyHybridSingleIndexDependenceModel
+
+    # check: every key is one we know -
+    _check_keys(data, [:tickers, :prices, :market, :number_of_states, :ν, :copula, :rf, :Δt, :min_obs,
+        :r2_preserve_threshold, :idiosyncratic_floor], model);
 
     # check: the required keys are present -
     if haskey(data, :tickers) == false
@@ -832,19 +987,32 @@ function build(model::Type{MyHybridSingleIndexDependenceModel}, data::NamedTuple
         idiosyncratic_floor = data.idiosyncratic_floor;
     end
 
+    # check: each value has the type we need, and the copula is one we can fit to the residuals -
+    _check_type(:tickers, tickers, Array{String,1});
+    _check_type(:prices, prices, Array{Float64,2});
+    _check_type(:market, market, String);
+    _check_type(:number_of_states, number_of_states, Int64);
+    _check_type(:ν, ν, Float64);
+    _check_type(:rf, rf, Float64);
+    _check_type(:Δt, Δt, Float64);
+    _check_type(:min_obs, min_obs, Int64);
+    _check_type(:r2_preserve_threshold, r2_preserve_threshold, Float64);
+    _check_type(:idiosyncratic_floor, idiosyncratic_floor, Float64);
+    is_copula_type = false;
+    if (isa(copula_type, Type) == true)
+        is_copula_type = (copula_type <: MyGaussianCopulaModel) || (copula_type <: MyStudentTCopulaModel) || (copula_type <: MyVineCopulaModel);
+    end
+    if (is_copula_type == false)
+        throw(ArgumentError("copula must be MyGaussianCopulaModel, MyStudentTCopulaModel, or MyVineCopulaModel, got $(copula_type)"));
+    end
+
     # check: the tickers match the columns, and the market is one of them -
     number_of_columns = size(prices, 2);
     if length(tickers) != number_of_columns
-        throw(ArgumentError("tickers must have one label for each column of prices"));
+        throw(ArgumentError("tickers has $(length(tickers)) labels but prices has $(number_of_columns) columns"));
     end
-    market_index = nothing;
-    for j ∈ eachindex(tickers)
-        if tickers[j] == market
-            market_index = j;
-            break;
-        end
-    end
-    if isnothing(market_index) == true
+    market_index = _market_index(tickers, market);
+    if market_index == 0
         throw(ArgumentError("the market ticker $(market) is not in tickers"));
     end
 
@@ -962,17 +1130,17 @@ follows from `own_variances` and the drift of `β` (`own_scale`).
 
 ### Optional Arguments
 The optional keys of `data` and their defaults are:
-- `rf::Float64`: The risk-free rate, per year, used for the growth rates of the prices. The default is `0.0`
-- `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
-- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. The default is `2`
-- `intercept_pull::Float64`: How much of its distance from the mean intercept each `α` keeps: `α = ᾱ + intercept_pull (α̂ - ᾱ)`. A value of `1.0` keeps the fitted intercepts, and `0.0` gives every asset the mean intercept. The default is `1.0`
-- `β_halflife::Float64`: The half-life of the drift of `β`, in trading days. The default is `126.0`
-- `β_scale::Union{Array{Float64,1},Nothing}`: The drift scale of `β` for each asset. If `nothing`, every scale is `0.0`, which keeps `β` fixed. The default is `nothing`
-- `center_steps::Int64`: The length of the draw that sets the long-run mean of each own model. The default is `1_000_000`
-- `center_seed::Int64`: The seed offset of the centering draws. Asset `i` uses `center_seed + i`. The default is `4 * 10^12`
-- `market_model::Union{MyJumpHiddenMarkovModel,Nothing}`: A market model to use instead of the one we would fit. The default is `nothing`
-- `sector_models::Union{Array{MyJumpHiddenMarkovModel,1},Nothing}`: The sector models to use instead of the ones we would fit, one per sector, in sorted label order. The default is `nothing`
-- `own_models::Union{Array{MyJumpHiddenMarkovModel,1},Nothing}`: The own models to use instead of the ones we would fit, one per asset, in asset order. We compute `ε_center` from the own models the model stores. The default is `nothing`
+- `rf::Float64`: The risk-free rate, per year, used for the growth rates of the prices. Default: `0.0`
+- `Δt::Float64`: The time step of the growth rates, in years. Default: `1/252`
+- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. Default: `2`
+- `intercept_pull::Float64`: How much of its distance from the mean intercept each `α` keeps: `α = ᾱ + intercept_pull (α̂ - ᾱ)`. A value of `1.0` keeps the fitted intercepts, and `0.0` gives every asset the mean intercept. Default: `1.0`
+- `β_halflife::Float64`: The half-life of the drift of `β`, in trading days. Default: `126.0`
+- `β_scale::Union{Array{Float64,1},Nothing}`: The drift scale of `β` for each asset. If `nothing`, every scale is `0.0`, which keeps `β` fixed. Default: `nothing`
+- `center_steps::Int64`: The length of the draw that sets the long-run mean of each own model. Default: `1_000_000`
+- `center_seed::Int64`: The seed offset of the centering draws. Asset `i` uses `center_seed + i`. Default: `4 * 10^12`
+- `market_model::Union{MyJumpHiddenMarkovModel,Nothing}`: A market model to use instead of the one we would fit. Default: `nothing`
+- `sector_models::Union{Array{MyJumpHiddenMarkovModel,1},Nothing}`: The sector models to use instead of the ones we would fit, one per sector, in sorted label order. Default: `nothing`
+- `own_models::Union{Array{MyJumpHiddenMarkovModel,1},Nothing}`: The own models to use instead of the ones we would fit, one per asset, in asset order. We compute `ε_center` from the own models the model stores. Default: `nothing`
 
 ### Example
 ```julia
@@ -987,6 +1155,10 @@ model = JumpHMM.build(JumpHMM.MySectorFactorModel, (
 ```
 """
 function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFactorModel
+
+    # check: every key is one we know -
+    _check_keys(data, [:tickers, :prices, :market, :sector, :number_of_states, :ν, :rf, :Δt, :min_obs, :intercept_pull,
+        :β_halflife, :β_scale, :center_steps, :center_seed, :market_model, :sector_models, :own_models], model);
 
     # check: the required keys are present -
     if haskey(data, :tickers) == false
@@ -1060,18 +1232,39 @@ function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFact
         own_models = data.own_models;
     end
 
+    # check: each value has the type we need, before any fitting -
+    _check_type(:tickers, tickers, Array{String,1});
+    _check_type(:prices, prices, Array{Float64,2});
+    _check_type(:market, market, String);
+    _check_type(:sector, sector, Array{String,1});
+    _check_type(:number_of_states, number_of_states, Int64);
+    _check_type(:ν, ν, Float64);
+    _check_type(:rf, rf, Float64);
+    _check_type(:Δt, Δt, Float64);
+    _check_type(:min_obs, min_obs, Int64);
+    _check_type(:intercept_pull, intercept_pull, Float64);
+    _check_type(:β_halflife, β_halflife, Float64);
+    _check_type(:β_scale, β_scale, Union{Array{Float64,1},Nothing});
+    _check_type(:center_steps, center_steps, Int64);
+    _check_type(:center_seed, center_seed, Int64);
+    _check_type(:market_model, market_model, Union{MyJumpHiddenMarkovModel,Nothing});
+    _check_type(:sector_models, sector_models, Union{Array{MyJumpHiddenMarkovModel,1},Nothing});
+    _check_type(:own_models, own_models, Union{Array{MyJumpHiddenMarkovModel,1},Nothing});
+
+    # check: the half-life of the drift and the length of the centering draw are positive -
+    if (β_halflife > 0.0) == false
+        throw(ArgumentError("β_halflife must be greater than 0, got $(β_halflife)"));
+    end
+    if (center_steps >= 1) == false
+        throw(ArgumentError("center_steps must be at least 1, got $(center_steps)"));
+    end
+
     # check: the tickers match the columns, and the market is one of them -
     number_of_columns = size(prices, 2);
     if length(tickers) != number_of_columns
         throw(ArgumentError("tickers has $(length(tickers)) labels but prices has $(number_of_columns) columns"));
     end
-    market_index = 0;
-    for j ∈ 1:number_of_columns
-        if tickers[j] == market
-            market_index = j;
-            break;
-        end
-    end
+    market_index = _market_index(tickers, market);
     if market_index == 0
         throw(ArgumentError("the market ticker $(market) is not in tickers"));
     end
@@ -1269,13 +1462,13 @@ and a portfolio built from one of them leaves the market ticker out of `tickers`
 
 ### Optional Arguments
 The optional keys of `data` and their defaults are:
-- `market::String`: The ticker of the market. It is required for the single-index, hybrid, and sector factor models, and it must be in `tickers`. The default is `""`
-- `rf::Float64`: The risk-free rate, per year, used for the growth rates of the prices. The default is `0.0`
-- `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
-- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. The default is `2`
-- `residual_method::Symbol`: How a single-index model draws the residuals, either `:bootstrap` or `:gaussian`. The default is `:bootstrap`
-- `sector::Array{String,1}`: The sector label of each ticker except the market. It is required for the sector factor model. The default is `String[]`
-- `sector_options::NamedTuple`: More optional keys for the build of the sector factor model, for example `(center_steps = 20_000,)`. The default is `NamedTuple()`
+- `market::String`: The ticker of the market. It is required for the single-index, hybrid, and sector factor models, and it must be in `tickers`. Default: `""`
+- `rf::Float64`: The risk-free rate, per year, used for the growth rates of the prices. Default: `0.0`
+- `Δt::Float64`: The time step of the growth rates, in years. Default: `1/252`
+- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. Default: `2`
+- `residual_method::Symbol`: How a single-index model draws the residuals, either `:bootstrap` or `:gaussian`. Default: `:bootstrap`
+- `sector::Array{String,1}`: The sector label of each ticker except the market. It is required for the sector factor model. Default: `String[]`
+- `sector_options::NamedTuple`: More optional keys for the build of the sector factor model, for example `(center_steps = 20_000,)`. Default: `NamedTuple()`
 
 ### Example
 ```julia
@@ -1289,6 +1482,10 @@ portfolio = JumpHMM.build(JumpHMM.MyPortfolioModel, (
 ```
 """
 function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioModel
+
+    # check: every key is one we know. The sector factor build checks the keys of sector_options -
+    _check_keys(data, [:tickers, :prices, :dependence, :number_of_states, :ν, :market, :rf, :Δt, :min_obs, :residual_method,
+        :sector, :sector_options], model);
 
     # check: the required keys are present -
     if haskey(data, :tickers) == false
@@ -1341,6 +1538,24 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
     if haskey(data, :sector_options) == true
         sector_options = data.sector_options;
     end
+
+    # check: the dependence model is given as a type, such as MyGaussianCopulaModel, and not as a model -
+    if (isa(dependence, Type) == false)
+        throw(ArgumentError("dependence must be a type, such as JumpHMM.MyGaussianCopulaModel, got a value of type $(typeof(dependence))"));
+    end
+
+    # check: each value has the type we need, before any fitting -
+    _check_type(:tickers, tickers, Array{String,1});
+    _check_type(:prices, prices, Array{Float64,2});
+    _check_type(:number_of_states, number_of_states, Int64);
+    _check_type(:ν, ν, Float64);
+    _check_type(:market, market, String);
+    _check_type(:rf, rf, Float64);
+    _check_type(:Δt, Δt, Float64);
+    _check_type(:min_obs, min_obs, Int64);
+    _check_type(:residual_method, residual_method, Symbol);
+    _check_type(:sector, sector, Array{String,1});
+    _check_type(:sector_options, sector_options, NamedTuple);
 
     # check: one ticker for each column of prices -
     number_of_columns = size(prices, 2);
@@ -1403,14 +1618,8 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
 
     # single index: the single-index model, then a hidden Markov model for each asset except the market -
     if is_single_index == true
-        market_index = nothing;
-        for j ∈ eachindex(tickers)
-            if tickers[j] == market
-                market_index = j;
-                break;
-            end
-        end
-        if isnothing(market_index) == true
+        market_index = _market_index(tickers, market);
+        if market_index == 0
             throw(ArgumentError("the market ticker $(market) is not in tickers"));
         end
         asset_columns = Array{Int64,1}();
@@ -1465,7 +1674,7 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
 
     # sector factor: the model holds the own models, so the marginals are the own models in the order of the tickers -
     if is_sector == true
-        dependence_model = build(dependence, merge((
+        sector_data = merge((
             tickers = tickers,
             prices = prices,
             market = market,
@@ -1475,7 +1684,8 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
             rf = rf,
             Δt = Δt,
             min_obs = min_obs
-        ), sector_options));
+        ), sector_options);
+        dependence_model = build(dependence, sector_data);
         marginals = Dict{String,MyJumpHiddenMarkovModel}();
         for i ∈ eachindex(dependence_model.tickers)
             marginals[dependence_model.tickers[i]] = dependence_model.own_models[i];
@@ -1483,6 +1693,10 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
         m.tickers = dependence_model.tickers;
         m.marginals = marginals;
         m.dependence = dependence_model;
+
+        # sector_options can replace rf and Δt, so the portfolio stores the values that the sector build used -
+        m.rf = sector_data.rf;
+        m.Δt = sector_data.Δt;
     end
 
     # return -

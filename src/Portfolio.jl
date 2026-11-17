@@ -1,19 +1,71 @@
 """
+    _tune_portfolio_model(model::MyJumpHiddenMarkovModel, growth_rates::Array{Float64,1}, ϵ_range, λ_range,
+        number_of_paths::Int64, number_of_steps::Int64, w_κ::Float64, p_neg::Union{Float64,Nothing},
+        N_tail::Union{Int64,Nothing}, acf_lags::Int64, seed::Union{Int64,Nothing}) -> MyJumpHiddenMarkovModel
+
+Tune one hidden Markov model of a portfolio with `tune`. If `p_neg` or `N_tail` is `nothing`, we use the value that `model` holds.
+Every other argument goes to `tune` as it is.
+
+### Arguments
+- `model::MyJumpHiddenMarkovModel`: The model to tune
+- `growth_rates::Array{Float64,1}`: The growth rates of the data
+- `ϵ_range`: The candidate values of `ϵ`
+- `λ_range`: The candidate values of `λ`
+- `number_of_paths::Int64`: The number of paths to simulate for each candidate pair
+- `number_of_steps::Int64`: The number of days of each simulated path, or `0` for the number of days of the data
+- `w_κ::Float64`: The weight of the kurtosis error in the score
+- `p_neg::Union{Float64,Nothing}`: The probability that a day of a jump episode is in the negative tail, or `nothing` for `model.p_neg`
+- `N_tail::Union{Int64,Nothing}`: The number of states in each tail that a jump episode can reach, or `nothing` for `model.N_tail`
+- `acf_lags::Int64`: The number of lags of the autocorrelation
+- `seed::Union{Int64,Nothing}`: The seed of the global random number generator, or `nothing` to leave it as it is
+
+### Returns
+- `MyJumpHiddenMarkovModel`: The tuned model
+
+### Example
+```julia
+tuned = JumpHMM._tune_portfolio_model(model, G, [1e-4, 3e-3], [10.0, 100.0], 5, 0, 0.20, nothing, nothing, 25, 15);
+```
+"""
+function _tune_portfolio_model(model::MyJumpHiddenMarkovModel, growth_rates::Array{Float64,1}, ϵ_range, λ_range,
+    number_of_paths::Int64, number_of_steps::Int64, w_κ::Float64, p_neg::Union{Float64,Nothing},
+    N_tail::Union{Int64,Nothing}, acf_lags::Int64, seed::Union{Int64,Nothing})::MyJumpHiddenMarkovModel
+
+    # use the tail settings of the model, unless we were given others -
+    model_p_neg = model.p_neg;
+    if (isnothing(p_neg) == false)
+        model_p_neg = p_neg;
+    end
+    model_N_tail = model.N_tail;
+    if (isnothing(N_tail) == false)
+        model_N_tail = N_tail;
+    end
+
+    # return -
+    return tune(model, growth_rates; ϵ_range = ϵ_range, λ_range = λ_range, number_of_paths = number_of_paths,
+        number_of_steps = number_of_steps, w_κ = w_κ, p_neg = model_p_neg, N_tail = model_N_tail, acf_lags = acf_lags,
+        seed = seed);
+end
+
+"""
     tune(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers_map::Union{Dict{String,Int64},Nothing} = nothing,
         market_col::Union{Int64,Nothing} = nothing, ϵ_range = range(1e-4, 2.5e-2, length = 20),
         λ_range = range(10.0, 160.0, length = 16), number_of_paths::Int64 = 200, number_of_steps::Int64 = 0,
-        w_κ::Float64 = 0.20, p_neg::Float64 = 0.52, N_tail::Int64 = 5, acf_lags::Int64 = 25,
-        seed::Union{Int64,Nothing} = nothing) -> MyPortfolioModel
+        w_κ::Float64 = 0.20, p_neg::Union{Float64,Nothing} = nothing, N_tail::Union{Int64,Nothing} = nothing,
+        acf_lags::Int64 = 25, seed::Union{Int64,Nothing} = nothing) -> MyPortfolioModel
 
 Tune the jump settings `ϵ` and `λ` of each hidden Markov model of a portfolio with `tune`, and return a new portfolio. We turn each price column
 into growth rates with `portfolio.rf` and `portfolio.Δt`. The portfolio you give is not changed. The new portfolio shares every part that tuning
 does not change with the portfolio you give.
 
 What we tune depends on the dependence model of the portfolio. A copula portfolio tunes the hidden Markov model of each asset. A single-index
-portfolio also tunes the market model, and a hybrid portfolio tunes the market model and the models of the assets. A sector factor portfolio tunes
-the market model on the market prices, each sector model on its level series, and each own model on its level series. We turn the level series into
-growth rates with `rf = 0.0`, because the level series were built with `rf = 0.0`. After tuning, we draw the long-run mean of each own model again, with the same
-`center_steps` and seeds as the portfolio you give. The scales `ψ` of the own draws stay as they are.
+portfolio also tunes the market model. A hybrid portfolio tunes the model of each asset, then the market model, and then the models of the assets
+that the hybrid model holds, in a second pass. A sector factor portfolio tunes the market model on the market prices, each sector model on its level
+series, and each own model on its level series. We turn the level series into growth rates with `rf = 0.0`, because the level series were built with
+`rf = 0.0`. After tuning, we draw the long-run mean of each own model again, with the same `center_steps` and seeds as the portfolio you give.
+The scales `ψ` of the own draws stay as they are.
+
+We visit the models of the assets in the order of the `marginals` dictionary. Without a `seed`, this order sets which random numbers each model draws.
 
 ### Arguments
 - `portfolio::MyPortfolioModel`: The portfolio to tune
@@ -25,13 +77,13 @@ growth rates with `rf = 0.0`, because the level series were built with `rf = 0.0
 ### Optional Arguments
 - `tickers_map::Union{Dict{String,Int64},Nothing}`: The column of each ticker in `prices`. If `nothing`, we use `portfolio.tickers_map`. Default: `nothing`
 - `market_col::Union{Int64,Nothing}`: The column of the market in `prices`. If `nothing`, we use the column of `portfolio.market_ticker`. Default: `nothing`
-- `ϵ_range`: The candidate values of `ϵ`. Default: `range(1e-4, 2.5e-2, length = 20)`
-- `λ_range`: The candidate values of `λ`. Default: `range(10.0, 160.0, length = 16)`
-- `number_of_paths::Int64`: The number of paths to simulate for each candidate pair. Default: `200`
+- `ϵ_range`: The candidate values of `ϵ`, the probability that a jump episode starts on a given day. Default: `range(1e-4, 2.5e-2, length = 20)`
+- `λ_range`: The candidate values of `λ`, the mean of the Poisson episode length, in trading days. Default: `range(10.0, 160.0, length = 16)`
+- `number_of_paths::Int64`: The number of paths to simulate for each candidate pair, at least `1`. Default: `200`
 - `number_of_steps::Int64`: The number of days of each simulated path. If `0`, we use the number of days of the data. Default: `0`
 - `w_κ::Float64`: The weight of the kurtosis error in the score. Default: `0.20`
-- `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail. Default: `0.52`
-- `N_tail::Int64`: The number of states in each tail that a jump episode can reach. Default: `5`
+- `p_neg::Union{Float64,Nothing}`: The probability that a day of a jump episode is in the negative tail. If `nothing`, each model keeps its own value. Default: `nothing`
+- `N_tail::Union{Int64,Nothing}`: The number of states in each tail that a jump episode can reach. If `nothing`, each model keeps its own value. Default: `nothing`
 - `acf_lags::Int64`: The number of lags of the autocorrelation. We shorten it if the data is too short. Default: `25`
 - `seed::Union{Int64,Nothing}`: The seed of the global random number generator, set before each model is tuned. If `nothing`, the generator is not reseeded. Default: `nothing`
 
@@ -43,8 +95,13 @@ tuned = JumpHMM.tune(portfolio, P; ϵ_range = [1e-4, 3e-3], λ_range = [10.0, 10
 function tune(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers_map::Union{Dict{String,Int64},Nothing} = nothing,
     market_col::Union{Int64,Nothing} = nothing, ϵ_range = range(1e-4, 2.5e-2, length = 20),
     λ_range = range(10.0, 160.0, length = 16), number_of_paths::Int64 = 200, number_of_steps::Int64 = 0,
-    w_κ::Float64 = 0.20, p_neg::Float64 = 0.52, N_tail::Int64 = 5, acf_lags::Int64 = 25,
-    seed::Union{Int64,Nothing} = nothing)::MyPortfolioModel
+    w_κ::Float64 = 0.20, p_neg::Union{Float64,Nothing} = nothing, N_tail::Union{Int64,Nothing} = nothing,
+    acf_lags::Int64 = 25, seed::Union{Int64,Nothing} = nothing)::MyPortfolioModel
+
+    # check the number of paths -
+    if (number_of_paths < 1)
+        throw(ArgumentError("number_of_paths must be at least 1, got $(number_of_paths)"));
+    end
 
     # initialize - use the stored columns unless we were given others -
     col_map = portfolio.tickers_map;
@@ -63,14 +120,14 @@ function tune(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers_map
         end
     end
 
-    # tune the hidden Markov model of each ticker on its price column. The own models of a sector factor model are tuned below -
+    # tune the hidden Markov model of each asset on its price column, in the order of the marginals dictionary.
+    # The own models of a sector factor model are tuned below -
     tuned_marginals = Dict{String,MyJumpHiddenMarkovModel}();
     if (isa(dep, MySectorFactorModel) == false)
-        for ticker ∈ portfolio.tickers
+        for (ticker, model) ∈ portfolio.marginals
             growth_rates = excess_growth_rates(prices[:, col_map[ticker]]; rf = rf, Δt = Δt);
-            tuned_marginals[ticker] = tune(portfolio.marginals[ticker], growth_rates; ϵ_range = ϵ_range, λ_range = λ_range,
-                number_of_paths = number_of_paths, number_of_steps = number_of_steps, w_κ = w_κ, p_neg = p_neg,
-                N_tail = N_tail, acf_lags = acf_lags, seed = seed);
+            tuned_marginals[ticker] = _tune_portfolio_model(model, growth_rates, ϵ_range, λ_range, number_of_paths,
+                number_of_steps, w_κ, p_neg, N_tail, acf_lags, seed);
         end
     end
 
@@ -80,9 +137,8 @@ function tune(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers_map
         market_tuned = dep.market_model;
         if (isnothing(mcol) == false)
             market_growth_rates = excess_growth_rates(prices[:, mcol]; rf = rf, Δt = Δt);
-            market_tuned = tune(dep.market_model, market_growth_rates; ϵ_range = ϵ_range, λ_range = λ_range,
-                number_of_paths = number_of_paths, number_of_steps = number_of_steps, w_κ = w_κ, p_neg = p_neg,
-                N_tail = N_tail, acf_lags = acf_lags, seed = seed);
+            market_tuned = _tune_portfolio_model(dep.market_model, market_growth_rates, ϵ_range, λ_range, number_of_paths,
+                number_of_steps, w_κ, p_neg, N_tail, acf_lags, seed);
         end
     end
 
@@ -98,14 +154,23 @@ function tune(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers_map
         dep = tuned_dep;
     end
 
-    # hybrid: a new model with the tuned market model and the tuned hidden Markov models of the assets -
+    # hybrid: tune the models of the assets that the hybrid model holds, in a second pass after the market, in the order of its
+    # marginals dictionary. These tuned models are separate from the tuned marginals of the portfolio -
     if (isa(dep, MyHybridSingleIndexDependenceModel) == true)
+        tuned_hybrid_marginals = Dict{String,MyJumpHiddenMarkovModel}();
+        for (ticker, model) ∈ dep.marginals
+            growth_rates = excess_growth_rates(prices[:, col_map[ticker]]; rf = rf, Δt = Δt);
+            tuned_hybrid_marginals[ticker] = _tune_portfolio_model(model, growth_rates, ϵ_range, λ_range, number_of_paths,
+                number_of_steps, w_κ, p_neg, N_tail, acf_lags, seed);
+        end
+
+        # a new model with the tuned market model and the tuned models of the assets, and everything else shared -
         tuned_dep = MyHybridSingleIndexDependenceModel();
         tuned_dep.α = dep.α;
         tuned_dep.β = dep.β;
         tuned_dep.r² = dep.r²;
         tuned_dep.σ_market = dep.σ_market;
-        tuned_dep.marginals = tuned_marginals;
+        tuned_dep.marginals = tuned_hybrid_marginals;
         tuned_dep.copula = dep.copula;
         tuned_dep.market_model = market_tuned;
         tuned_dep.tickers = dep.tickers;
@@ -119,16 +184,14 @@ function tune(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers_map
         sector_models = Array{MyJumpHiddenMarkovModel,1}();
         for s ∈ eachindex(dep.sector_models)
             sector_growth_rates = excess_growth_rates(dep.sector_levels[:, s]; rf = 0.0, Δt = Δt);
-            push!(sector_models, tune(dep.sector_models[s], sector_growth_rates; ϵ_range = ϵ_range, λ_range = λ_range,
-                number_of_paths = number_of_paths, number_of_steps = number_of_steps, w_κ = w_κ, p_neg = p_neg,
-                N_tail = N_tail, acf_lags = acf_lags, seed = seed));
+            push!(sector_models, _tune_portfolio_model(dep.sector_models[s], sector_growth_rates, ϵ_range, λ_range,
+                number_of_paths, number_of_steps, w_κ, p_neg, N_tail, acf_lags, seed));
         end
         own_models = Array{MyJumpHiddenMarkovModel,1}();
         for i ∈ eachindex(dep.tickers)
             own_growth_rates = excess_growth_rates(dep.own_levels[:, i]; rf = 0.0, Δt = Δt);
-            push!(own_models, tune(dep.own_models[i], own_growth_rates; ϵ_range = ϵ_range, λ_range = λ_range,
-                number_of_paths = number_of_paths, number_of_steps = number_of_steps, w_κ = w_κ, p_neg = p_neg,
-                N_tail = N_tail, acf_lags = acf_lags, seed = seed));
+            push!(own_models, _tune_portfolio_model(dep.own_models[i], own_growth_rates, ϵ_range, λ_range,
+                number_of_paths, number_of_steps, w_κ, p_neg, N_tail, acf_lags, seed));
             tuned_marginals[dep.tickers[i]] = own_models[i];
         end
 
@@ -205,7 +268,7 @@ The way we draw the paths depends on the dependence model:
     - `episodes::Array{Bool,2}`: A flag that is `true` if the day is part of a jump episode
 
 ### Optional Arguments
-- `number_of_paths::Int64`: The number of paths to simulate. Default: `1000`
+- `number_of_paths::Int64`: The number of paths to simulate, at least `1`. Default: `1000`
 - `seed::Union{Int64,Nothing}`: The seed of the global random number generator. If `nothing`, the generator is not reseeded. A sector factor portfolio draws the seed of each path from `seed`. Default: `nothing`
 
 ### Example
@@ -216,9 +279,12 @@ paths = JumpHMM.simulate(portfolio, 252; number_of_paths = 100, seed = 5660);
 function simulate(portfolio::MyPortfolioModel, number_of_steps::Int64; number_of_paths::Int64 = 1000,
     seed::Union{Int64,Nothing} = nothing)::Dict{String,NamedTuple}
 
-    # check the number of days -
+    # check the number of days and the number of paths -
     if (number_of_steps < 1)
         throw(ArgumentError("number_of_steps must be at least 1, got $(number_of_steps)"));
+    end
+    if (number_of_paths < 1)
+        throw(ArgumentError("number_of_paths must be at least 1, got $(number_of_paths)"));
     end
 
     # check the dependence model, before we touch the random number generator -
@@ -331,6 +397,8 @@ Validate the hidden Markov model of each asset of a portfolio against the growth
 into growth rates with `portfolio.rf` and `portfolio.Δt`. A sector factor portfolio validates each own model against its own level series
 instead, with `rf = 0.0`, because the own model describes the residual of the asset after its sector term.
 
+We visit the models of the assets in the order of the `marginals` dictionary. Without a `seed`, this order sets which random numbers each model draws.
+
 ### Arguments
 - `portfolio::MyPortfolioModel`: The portfolio to validate
 - `prices::Array{Float64,2}`: The prices, one row per day. The columns are the ones the portfolio was built from
@@ -340,7 +408,7 @@ instead, with `rf = 0.0`, because the own model describes the residual of the as
 
 ### Optional Arguments
 - `tickers_map::Union{Dict{String,Int64},Nothing}`: The column of each ticker in `prices`. If `nothing`, we use `portfolio.tickers_map`. Default: `nothing`
-- `number_of_paths::Int64`: The number of paths to simulate for each asset. Default: `1000`
+- `number_of_paths::Int64`: The number of paths to simulate for each asset, at least `1`. Default: `1000`
 - `α::Float64`: The significance level of the tests. A path passes a test if its p-value is above `α`. Default: `0.05`
 - `acf_lags::Int64`: The number of lags of the autocorrelation. We shorten it if the data is too short. Default: `25`
 - `seed::Union{Int64,Nothing}`: The seed of the global random number generator, set before each asset is validated. If `nothing`, the generator is not reseeded. Default: `nothing`
@@ -353,6 +421,11 @@ reports = JumpHMM.validate(portfolio, P; number_of_paths = 100, seed = 18);
 function validate(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers_map::Union{Dict{String,Int64},Nothing} = nothing,
     number_of_paths::Int64 = 1000, α::Float64 = 0.05, acf_lags::Int64 = 25,
     seed::Union{Int64,Nothing} = nothing)::Dict{String,MyValidationReportModel}
+
+    # check the number of paths -
+    if (number_of_paths < 1)
+        throw(ArgumentError("number_of_paths must be at least 1, got $(number_of_paths)"));
+    end
 
     # initialize - use the stored columns unless we were given others -
     col_map = portfolio.tickers_map;
@@ -370,10 +443,11 @@ function validate(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers
                 acf_lags = acf_lags, seed = seed);
         end
     else
-        # every other dependence model: check the hidden Markov model of each ticker on its price column -
-        for ticker ∈ portfolio.tickers
+        # every other dependence model: check the hidden Markov model of each asset on its price column, in the order of the
+        # marginals dictionary. Without a seed, this order sets which random numbers each model draws -
+        for (ticker, model) ∈ portfolio.marginals
             growth_rates = excess_growth_rates(prices[:, col_map[ticker]]; rf = portfolio.rf, Δt = portfolio.Δt);
-            reports[ticker] = validate(portfolio.marginals[ticker], growth_rates; number_of_paths = number_of_paths, α = α,
+            reports[ticker] = validate(model, growth_rates; number_of_paths = number_of_paths, α = α,
                 acf_lags = acf_lags, seed = seed);
         end
     end

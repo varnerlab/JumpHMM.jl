@@ -7,7 +7,7 @@ Fit a Laplace distribution to the growth rates, and use its quantiles to cut the
 `number_of_states` states that are equally likely under the fitted distribution.
 
 ### Arguments
-- `growth_rates::Array{Float64,1}`: The growth rates. They must not all be equal
+- `growth_rates::Array{Float64,1}`: The growth rates. Every value must be finite, and the values must not all be equal
 - `number_of_states::Int64`: The number of states. It must be at least `1`
 
 ### Returns
@@ -21,8 +21,15 @@ partition = JumpHMM.laplace_boundaries(growth_rates, 100);
 """
 function laplace_boundaries(growth_rates::Array{Float64,1}, number_of_states::Int64)::NamedTuple
 
-    # check: the growth rates must vary, otherwise there is no Laplace scale to fit -
+    # check: every growth rate is finite, otherwise the Laplace fit is not defined -
     number_of_growth_rates = length(growth_rates);
+    for i ∈ 1:number_of_growth_rates
+        if isfinite(growth_rates[i]) == false
+            throw(ArgumentError("every value in growth_rates must be finite, got $(growth_rates[i]) at position $(i)"));
+        end
+    end
+
+    # check: the growth rates must vary, otherwise there is no Laplace scale to fit -
     all_equal = true;
     for i ∈ 1:number_of_growth_rates
         if growth_rates[i] != growth_rates[1]
@@ -187,11 +194,13 @@ standard deviation of all growth rates. A state with fewer than `min_obs` growth
 - `states::Array{Int64,1}`: The state at each time step
 - `growth_rates::Array{Float64,1}`: The growth rates
 - `number_of_states::Int64`: The number of states
-- `ν::Float64`: The degrees of freedom of the emission distributions. The default is `5.0`. It is not used in the estimates
-- `min_obs::Int64`: The fewest growth rates a state needs to use its own estimates. The default is `2`
 
 ### Returns
 - `NamedTuple`: The location `μ`, the scale `σ`, the number of growth rates `n`, and the flag `fallback` of each state
+
+### Optional Arguments
+- `ν::Float64`: The degrees of freedom of the emission distributions. It is not used in the estimates. Default: `5.0`
+- `min_obs::Int64`: The fewest growth rates a state needs to use its own estimates. Default: `2`
 
 ### Example
 ```julia

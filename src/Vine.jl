@@ -12,6 +12,11 @@ Clamp `x` to the interval from `1e-10` to `1 - 1e-10`, so that logarithms and qu
 
 ### Returns
 - `Float64`: The clamped number
+
+### Example
+```julia
+x = JumpHMM._clamp01(1.0); # 1 - 1e-10
+```
 """
 function _clamp01(x::Float64)::Float64
     return clamp(x, 1e-10, 1.0 - 1e-10);
@@ -29,6 +34,12 @@ Evaluate the h-function of a Gaussian copula. The h-function is the conditional 
 
 ### Returns
 - `Float64`: The conditional probability, strictly between `0` and `1`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyGaussianBivariateCopulaModel, (ρ = 0.5,));
+w = JumpHMM._bicop_hfunc(c, 0.3, 0.7);
+```
 """
 function _bicop_hfunc(c::MyGaussianBivariateCopulaModel, u::Float64, v::Float64)::Float64
 
@@ -53,6 +64,12 @@ Evaluate the h-function of a Student-t copula. The h-function is the conditional
 
 ### Returns
 - `Float64`: The conditional probability, strictly between `0` and `1`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyStudentTBivariateCopulaModel, (ρ = 0.5, ν = 5.0));
+w = JumpHMM._bicop_hfunc(c, 0.3, 0.7);
+```
 """
 function _bicop_hfunc(c::MyStudentTBivariateCopulaModel, u::Float64, v::Float64)::Float64
 
@@ -82,6 +99,12 @@ Evaluate the h-function of a Clayton copula. The h-function is the conditional d
 
 ### Returns
 - `Float64`: The conditional probability, strictly between `0` and `1`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyClaytonBivariateCopulaModel, (θ = 2.0,));
+w = JumpHMM._bicop_hfunc(c, 0.3, 0.7);
+```
 """
 function _bicop_hfunc(c::MyClaytonBivariateCopulaModel, u::Float64, v::Float64)::Float64
 
@@ -109,6 +132,12 @@ Evaluate the h-function of a Gumbel copula. The h-function is the conditional di
 
 ### Returns
 - `Float64`: The conditional probability, strictly between `0` and `1`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyGumbelBivariateCopulaModel, (θ = 1.5,));
+w = JumpHMM._bicop_hfunc(c, 0.3, 0.7);
+```
 """
 function _bicop_hfunc(c::MyGumbelBivariateCopulaModel, u::Float64, v::Float64)::Float64
 
@@ -129,7 +158,7 @@ end
 """
     _bicop_hfunc(c::MyFrankBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the h-function of a Frank copula. The h-function is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We evaluate the closed form of the derivative of the Frank copula with respect to `v`. The result is clamped away from `0` and `1`.
+Evaluate the h-function of a Frank copula. The h-function is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We evaluate the closed form of the derivative of the Frank copula with respect to `v`. The result is clamped away from `0` and `1`. For `θ = 0.0`, the copula is the independence copula, and the h-function returns `u`.
 
 ### Arguments
 - `c::MyFrankBivariateCopulaModel`: The Frank copula
@@ -138,12 +167,25 @@ Evaluate the h-function of a Frank copula. The h-function is the conditional dis
 
 ### Returns
 - `Float64`: The conditional probability, strictly between `0` and `1`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyFrankBivariateCopulaModel, (θ = 4.0,));
+w = JumpHMM._bicop_hfunc(c, 0.3, 0.7);
+```
 """
 function _bicop_hfunc(c::MyFrankBivariateCopulaModel, u::Float64, v::Float64)::Float64
 
     # initialize -
     θ = c.θ;
     u, v = _clamp01(u), _clamp01(v);
+
+    # θ = 0 is the independence copula, where the closed form divides zero by zero. The h-function of independence is u -
+    if θ == 0.0
+        return u;
+    end
+
+    # the exponential terms of the closed form -
     eu = exp(-θ * u);
     ev = exp(-θ * v);
     eθ = exp(-θ);
@@ -170,8 +212,14 @@ Invert the h-function of the copula `c` by bisection. We search the interval fro
 - `Float64`: The uniform number of the first asset
 
 ### Optional Arguments
-- `tol::Float64`: The length of the interval at which we stop. The default is `1e-8`
-- `maxiter::Int64`: The largest number of halvings. The default is `100`
+- `tol::Float64`: The length of the interval at which we stop. Default: `1e-8`
+- `maxiter::Int64`: The largest number of halvings. Default: `100`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyFrankBivariateCopulaModel, (θ = 4.0,));
+u = JumpHMM._hinv_bisect(c, 0.4, 0.7);
+```
 """
 function _hinv_bisect(c::AbstractBivariateCopulaModel, w::Float64, v::Float64; tol::Float64 = 1e-8, maxiter::Int64 = 100)::Float64
 
@@ -209,6 +257,12 @@ Evaluate the inverse of the h-function of a Gaussian copula in closed form. The 
 
 ### Returns
 - `Float64`: The uniform number `u` of the first asset with `_bicop_hfunc(c, u, v) = w`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyGaussianBivariateCopulaModel, (ρ = 0.5,));
+u = JumpHMM._bicop_hinv(c, 0.4, 0.7);
+```
 """
 function _bicop_hinv(c::MyGaussianBivariateCopulaModel, w::Float64, v::Float64)::Float64
 
@@ -236,6 +290,12 @@ Evaluate the inverse of the h-function of a Student-t copula in closed form. The
 
 ### Returns
 - `Float64`: The uniform number `u` of the first asset with `_bicop_hfunc(c, u, v) = w`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyStudentTBivariateCopulaModel, (ρ = 0.5, ν = 5.0));
+u = JumpHMM._bicop_hinv(c, 0.4, 0.7);
+```
 """
 function _bicop_hinv(c::MyStudentTBivariateCopulaModel, w::Float64, v::Float64)::Float64
 
@@ -265,6 +325,12 @@ Evaluate the inverse of the h-function of a Clayton copula. The inverse has no c
 
 ### Returns
 - `Float64`: The uniform number `u` of the first asset with `_bicop_hfunc(c, u, v) = w`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyClaytonBivariateCopulaModel, (θ = 2.0,));
+u = JumpHMM._bicop_hinv(c, 0.4, 0.7);
+```
 """
 function _bicop_hinv(c::MyClaytonBivariateCopulaModel, w::Float64, v::Float64)::Float64
     return _hinv_bisect(c, w, v);
@@ -282,6 +348,12 @@ Evaluate the inverse of the h-function of a Gumbel copula. The inverse has no cl
 
 ### Returns
 - `Float64`: The uniform number `u` of the first asset with `_bicop_hfunc(c, u, v) = w`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyGumbelBivariateCopulaModel, (θ = 1.5,));
+u = JumpHMM._bicop_hinv(c, 0.4, 0.7);
+```
 """
 function _bicop_hinv(c::MyGumbelBivariateCopulaModel, w::Float64, v::Float64)::Float64
     return _hinv_bisect(c, w, v);
@@ -290,7 +362,7 @@ end
 """
     _bicop_hinv(c::MyFrankBivariateCopulaModel, w::Float64, v::Float64) -> Float64
 
-Evaluate the inverse of the h-function of a Frank copula. The inverse has no closed form that we trust numerically. We find the inverse by bisection with `_hinv_bisect`.
+Evaluate the inverse of the h-function of a Frank copula. The inverse has no closed form that we trust numerically. We find the inverse by bisection with `_hinv_bisect`. For `θ = 0.0`, the copula is the independence copula, and the inverse returns `w`, clamped away from `0` and `1`.
 
 ### Arguments
 - `c::MyFrankBivariateCopulaModel`: The Frank copula
@@ -299,8 +371,21 @@ Evaluate the inverse of the h-function of a Frank copula. The inverse has no clo
 
 ### Returns
 - `Float64`: The uniform number `u` of the first asset with `_bicop_hfunc(c, u, v) = w`
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyFrankBivariateCopulaModel, (θ = 4.0,));
+u = JumpHMM._bicop_hinv(c, 0.4, 0.7);
+```
 """
 function _bicop_hinv(c::MyFrankBivariateCopulaModel, w::Float64, v::Float64)::Float64
+
+    # θ = 0 is the independence copula, whose h-function is u, so the inverse is w -
+    if c.θ == 0.0
+        return _clamp01(w);
+    end
+
+    # return -
     return _hinv_bisect(c, w, v);
 end
 
@@ -316,6 +401,12 @@ Evaluate the log of the density of a Gaussian copula at the point `(u, v)`. We u
 
 ### Returns
 - `Float64`: The log-density
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyGaussianBivariateCopulaModel, (ρ = 0.5,));
+log_density = JumpHMM._bicop_logpdf(c, 0.3, 0.7);
+```
 """
 function _bicop_logpdf(c::MyGaussianBivariateCopulaModel, u::Float64, v::Float64)::Float64
 
@@ -341,6 +432,12 @@ Evaluate the log of the density of a Student-t copula at the point `(u, v)`. We 
 
 ### Returns
 - `Float64`: The log-density
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyStudentTBivariateCopulaModel, (ρ = 0.5, ν = 5.0));
+log_density = JumpHMM._bicop_logpdf(c, 0.3, 0.7);
+```
 """
 function _bicop_logpdf(c::MyStudentTBivariateCopulaModel, u::Float64, v::Float64)::Float64
 
@@ -374,6 +471,12 @@ Evaluate the log of the density of a Clayton copula at the point `(u, v)`. We us
 
 ### Returns
 - `Float64`: The log-density
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyClaytonBivariateCopulaModel, (θ = 2.0,));
+log_density = JumpHMM._bicop_logpdf(c, 0.3, 0.7);
+```
 """
 function _bicop_logpdf(c::MyClaytonBivariateCopulaModel, u::Float64, v::Float64)::Float64
 
@@ -398,6 +501,12 @@ Evaluate the log of the density of a Gumbel copula at the point `(u, v)`. We use
 
 ### Returns
 - `Float64`: The log-density
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyGumbelBivariateCopulaModel, (θ = 1.5,));
+log_density = JumpHMM._bicop_logpdf(c, 0.3, 0.7);
+```
 """
 function _bicop_logpdf(c::MyGumbelBivariateCopulaModel, u::Float64, v::Float64)::Float64
 
@@ -423,7 +532,7 @@ end
 """
     _bicop_logpdf(c::MyFrankBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the log of the density of a Frank copula at the point `(u, v)`. We use the log-density to compute the AIC of the copula. We return `-Inf` when the density is too small to evaluate.
+Evaluate the log of the density of a Frank copula at the point `(u, v)`. We use the log-density to compute the AIC of the copula. We return `-Inf` when the density is too small to evaluate. For `θ = 0.0`, the copula is the independence copula, whose density is `1`, and we return `0.0`.
 
 ### Arguments
 - `c::MyFrankBivariateCopulaModel`: The Frank copula
@@ -432,12 +541,25 @@ Evaluate the log of the density of a Frank copula at the point `(u, v)`. We use 
 
 ### Returns
 - `Float64`: The log-density
+
+### Example
+```julia
+c = JumpHMM.build(JumpHMM.MyFrankBivariateCopulaModel, (θ = 4.0,));
+log_density = JumpHMM._bicop_logpdf(c, 0.3, 0.7);
+```
 """
 function _bicop_logpdf(c::MyFrankBivariateCopulaModel, u::Float64, v::Float64)::Float64
 
     # initialize -
     θ = c.θ;
     u, v = _clamp01(u), _clamp01(v);
+
+    # θ = 0 is the independence copula, whose density is 1 everywhere -
+    if θ == 0.0
+        return 0.0;
+    end
+
+    # the numerator and the denominator of the density -
     et = exp(-θ);
     eu = exp(-θ * u);
     ev = exp(-θ * v);
@@ -465,6 +587,12 @@ Fit a Gaussian copula to the uniform numbers `u` and `v`. We convert Kendall's t
 
 ### Returns
 - `MyGaussianBivariateCopulaModel`: The fitted Gaussian copula
+
+### Example
+```julia
+U = JumpHMM._uniform_ranks(GA[:, 2:3]);
+c = JumpHMM._bicop_fit(JumpHMM.MyGaussianBivariateCopulaModel, U[:, 1], U[:, 2]);
+```
 """
 function _bicop_fit(model::Type{MyGaussianBivariateCopulaModel}, u::Array{Float64,1}, v::Array{Float64,1})::MyGaussianBivariateCopulaModel
 
@@ -489,6 +617,12 @@ Fit a Student-t copula to the uniform numbers `u` and `v`. We estimate `ρ` from
 
 ### Returns
 - `MyStudentTBivariateCopulaModel`: The fitted Student-t copula
+
+### Example
+```julia
+U = JumpHMM._uniform_ranks(GA[:, 2:3]);
+c = JumpHMM._bicop_fit(JumpHMM.MyStudentTBivariateCopulaModel, U[:, 1], U[:, 2]);
+```
 """
 function _bicop_fit(model::Type{MyStudentTBivariateCopulaModel}, u::Array{Float64,1}, v::Array{Float64,1})::MyStudentTBivariateCopulaModel
 
@@ -527,6 +661,12 @@ Fit a Clayton copula to the uniform numbers `u` and `v`. We set `θ = 2τ / (1 -
 
 ### Returns
 - `MyClaytonBivariateCopulaModel`: The fitted Clayton copula
+
+### Example
+```julia
+U = JumpHMM._uniform_ranks(GA[:, 2:3]);
+c = JumpHMM._bicop_fit(JumpHMM.MyClaytonBivariateCopulaModel, U[:, 1], U[:, 2]);
+```
 """
 function _bicop_fit(model::Type{MyClaytonBivariateCopulaModel}, u::Array{Float64,1}, v::Array{Float64,1})::MyClaytonBivariateCopulaModel
 
@@ -556,6 +696,12 @@ Fit a Gumbel copula to the uniform numbers `u` and `v`. We set `θ = 1 / (1 - τ
 
 ### Returns
 - `MyGumbelBivariateCopulaModel`: The fitted Gumbel copula
+
+### Example
+```julia
+U = JumpHMM._uniform_ranks(GA[:, 2:3]);
+c = JumpHMM._bicop_fit(JumpHMM.MyGumbelBivariateCopulaModel, U[:, 1], U[:, 2]);
+```
 """
 function _bicop_fit(model::Type{MyGumbelBivariateCopulaModel}, u::Array{Float64,1}, v::Array{Float64,1})::MyGumbelBivariateCopulaModel
 
@@ -583,6 +729,11 @@ Compute Kendall's tau of a Frank copula with parameter `θ`, `τ = 1 - 4/θ (1 -
 
 ### Returns
 - `Float64`: Kendall's tau
+
+### Example
+```julia
+τ = JumpHMM._frank_tau(4.0);
+```
 """
 function _frank_tau(θ::Float64)::Float64
 
@@ -617,6 +768,12 @@ Fit a Frank copula to the uniform numbers `u` and `v`. We find `θ` by bisection
 
 ### Returns
 - `MyFrankBivariateCopulaModel`: The fitted Frank copula
+
+### Example
+```julia
+U = JumpHMM._uniform_ranks(GA[:, 2:3]);
+c = JumpHMM._bicop_fit(JumpHMM.MyFrankBivariateCopulaModel, U[:, 1], U[:, 2]);
+```
 """
 function _bicop_fit(model::Type{MyFrankBivariateCopulaModel}, u::Array{Float64,1}, v::Array{Float64,1})::MyFrankBivariateCopulaModel
 
@@ -663,6 +820,12 @@ Choose the bivariate copula for one edge. We fit each of the five families to `u
 
 ### Returns
 - `AbstractBivariateCopulaModel`: The fitted copula with the smallest AIC
+
+### Example
+```julia
+U = JumpHMM._uniform_ranks(GA[:, 2:3]);
+c = JumpHMM._select_bicop(U[:, 1], U[:, 2]);
+```
 """
 function _select_bicop(u::Array{Float64,1}, v::Array{Float64,1})::AbstractBivariateCopulaModel
 

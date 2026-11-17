@@ -42,15 +42,18 @@ end
 """
     hellinger_distance(x::Array{Float64,1}, y::Array{Float64,1}) -> Float64
 
-Compute the Hellinger distance between two samples. We put both samples into the same histogram bins, scale each histogram to sum to one,
-and compare the square roots of the bin probabilities. If both samples are the same single value, the distance is `0.0`.
+Compute the Hellinger distance between two samples. We split the range from the smallest to the largest value of both samples into
+equal-width bins, count the values of each sample in each bin, and scale each count to a probability. Every value is counted: a value
+`v` falls in bin `floor((v - lo) / (hi - lo) * number_of_bins) + 1`, where `lo` and `hi` are the smallest and largest values, and the
+largest value falls in the last bin. The number of bins is the larger of `30` and the square root of the size of the larger sample.
+If both samples hold only the same single value, the distance is `0.0`.
 
 ### Arguments
-- `x::Array{Float64,1}`: The first sample
-- `y::Array{Float64,1}`: The second sample
+- `x::Array{Float64,1}`: The first sample, with at least one value
+- `y::Array{Float64,1}`: The second sample, with at least one value
 
 ### Returns
-- `Float64`: The Hellinger distance between `x` and `y`, between `0.0` and `1.0`
+- `Float64`: The Hellinger distance between `x` and `y`, from `0.0` for the same bin probabilities to `1.0` for samples with no bin in common
 
 ### Example
 ```julia
@@ -58,6 +61,11 @@ d = JumpHMM.hellinger_distance([0.1, -0.2, 0.3], [0.0, 0.2, 0.4]);
 ```
 """
 function hellinger_distance(x::Array{Float64,1}, y::Array{Float64,1})::Float64
+
+    # check: each sample has at least one value -
+    if (isempty(x) == true || isempty(y) == true)
+        throw(ArgumentError("hellinger_distance needs at least one value in each sample, got $(length(x)) and $(length(y))"));
+    end
 
     # the range that covers both samples -
     lowest = min(minimum(x), minimum(y));
@@ -68,15 +76,32 @@ function hellinger_distance(x::Array{Float64,1}, y::Array{Float64,1})::Float64
         return 0.0;
     end
 
-    # common bin edges for both samples -
+    # the number of equal-width bins between the smallest and the largest value -
     number_of_bins = max(30, round(Int, sqrt(max(length(x), length(y)))));
-    edges = range(lowest, highest, length = number_of_bins + 1);
 
-    # histogram each sample, and scale each histogram to sum to one -
-    hx = StatsBase.fit(Histogram, x, edges);
-    hy = StatsBase.fit(Histogram, y, edges);
-    px = hx.weights ./ sum(hx.weights);
-    py = hy.weights ./ sum(hy.weights);
+    # count the values of x in each bin. The largest value would land one bin past the end, so it goes in the last bin -
+    counts_x = zeros(Int64, number_of_bins);
+    for i ∈ eachindex(x)
+        k = floor(Int64, (x[i] - lowest) / (highest - lowest) * number_of_bins) + 1;
+        if (k > number_of_bins)
+            k = number_of_bins;
+        end
+        counts_x[k] += 1;
+    end
+
+    # count the values of y in each bin, the same way -
+    counts_y = zeros(Int64, number_of_bins);
+    for i ∈ eachindex(y)
+        k = floor(Int64, (y[i] - lowest) / (highest - lowest) * number_of_bins) + 1;
+        if (k > number_of_bins)
+            k = number_of_bins;
+        end
+        counts_y[k] += 1;
+    end
+
+    # scale each count to a probability -
+    px = counts_x ./ sum(counts_x);
+    py = counts_y ./ sum(counts_y);
 
     # the Hellinger distance -
     return sqrt(0.5 * sum((sqrt.(px) .- sqrt.(py)).^2));
@@ -98,7 +123,7 @@ excess kurtosis. Each path has as many days as `growth_rates`.
 - `MyValidationReportModel`: The results for each path, and their summaries over the paths
 
 ### Optional Arguments
-- `number_of_paths::Int64`: The number of paths to simulate. Default: `1000`
+- `number_of_paths::Int64`: The number of paths to simulate, at least `1`. Default: `1000`
 - `α::Float64`: The significance level of the tests. A path passes a test if its p-value is above `α`. Default: `0.05`
 - `acf_lags::Int64`: The number of lags of the autocorrelation. We shorten it if the data is too short. Default: `25`
 - `seed::Union{Int64,Nothing}`: The seed of the global random number generator. If `nothing`, the generator is not reseeded. Default: `nothing`
@@ -111,6 +136,11 @@ report = JumpHMM.validate(model, G; number_of_paths = 20, seed = 9);
 """
 function validate(model::MyJumpHiddenMarkovModel, growth_rates::Array{Float64,1}; number_of_paths::Int64 = 1000,
     α::Float64 = 0.05, acf_lags::Int64 = 25, seed::Union{Int64,Nothing} = nothing)::MyValidationReportModel
+
+    # check the number of paths -
+    if (number_of_paths < 1)
+        throw(ArgumentError("number_of_paths must be at least 1, got $(number_of_paths)"));
+    end
 
     # initialize - the data has as many days as the growth rates, and the autocorrelation needs fewer lags than days -
     number_of_steps = length(growth_rates);

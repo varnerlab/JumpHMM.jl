@@ -8,6 +8,9 @@
     @test size(paths.episodes) == (30, 7)
     @test !any(paths.episodes)
     @test_throws ArgumentError JumpHMM.simulate(model, 0)
+    @test_throws ArgumentError JumpHMM.simulate(model, 10; number_of_paths = 0)
+    @test_throws ArgumentError JumpHMM.simulate(model, 10; start = 0)
+    @test_throws ArgumentError JumpHMM.simulate(model, 10; start = 21)
 
     # start = k puts state k in row 1 of every path -
     for k in [1, 7, 20]

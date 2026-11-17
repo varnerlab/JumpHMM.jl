@@ -4,7 +4,7 @@
 
 Simulate synthetic growth rate paths from a jump hidden Markov model. Day 1 of each path starts in a state and emits a growth rate.
 Every later day is an ordinary day or a day of a jump episode. On an ordinary day, the model draws the next state from the transition matrix. On a day of a jump
-episode, the model draws one of the tail states. A jump episode starts with probability `ϵ` on a day and lasts a Poisson(`λ`) number of days.
+episode, the model draws one of the tail states. A jump episode starts with probability `ϵ` on a given day and lasts a Poisson(`λ`) number of days.
 An episode length of zero makes the day an ordinary day. An episode that would run past the last day stops at the last day.
 
 ### Arguments
@@ -18,8 +18,8 @@ An episode length of zero makes the day an ordinary day. An episode that would r
     - `episodes::Array{Bool,2}`: A flag that is `true` if the day is part of a jump episode
 
 ### Optional Arguments
-- `number_of_paths::Int64`: The number of paths to simulate. Default: `1000`
-- `start::Union{Int64,Nothing}`: The state of day 1. If `nothing`, the start state is drawn from the stationary distribution. Default: `nothing`
+- `number_of_paths::Int64`: The number of paths to simulate, at least `1`. Default: `1000`
+- `start::Union{Int64,Nothing}`: The state of day 1, from `1` to `number_of_states`. If `nothing`, the start state is drawn from the stationary distribution. Default: `nothing`
 - `seed::Union{Int64,Nothing}`: The seed of the global random number generator. If `nothing`, the generator is not reseeded. Default: `nothing`
 
 ### Example
@@ -31,9 +31,17 @@ paths = JumpHMM.simulate(model, 252; number_of_paths = 100, seed = 5660);
 function simulate(model::MyJumpHiddenMarkovModel, number_of_steps::Int64; number_of_paths::Int64 = 1000,
     start::Union{Int64,Nothing} = nothing, seed::Union{Int64,Nothing} = nothing)::NamedTuple
 
-    # check the number of days -
+    # check the number of days, the number of paths, and the start state -
     if (number_of_steps < 1)
         throw(ArgumentError("number_of_steps must be at least 1, got $(number_of_steps)"));
+    end
+    if (number_of_paths < 1)
+        throw(ArgumentError("number_of_paths must be at least 1, got $(number_of_paths)"));
+    end
+    if (isnothing(start) == false)
+        if (start < 1 || start > model.number_of_states)
+            throw(ArgumentError("start must be a state from 1 to $(model.number_of_states), got $(start)"));
+        end
     end
 
     # seed the global random number generator, if we were given a seed -

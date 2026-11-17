@@ -9,6 +9,7 @@ module JumpHMM
 
     # export abstract types -
     export AbstractMarkovModel, AbstractDependenceModel, AbstractBivariateCopulaModel, AbstractReportModel
+    export AbstractVineEdgeModel, AbstractPortfolioModel
 
     # export concrete types -
     export MyJumpHiddenMarkovModel, MyValidationReportModel

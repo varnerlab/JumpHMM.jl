@@ -1,5 +1,5 @@
 """
-    score_candidate(paths::NamedTuple, acf_observed::Array{Float64,1}, κ_observed::Float64,
+    _score_candidate(paths::NamedTuple, acf_observed::Array{Float64,1}, κ_observed::Float64,
         lags::Array{Int64,1}, w_κ::Float64) -> Tuple{Float64,Int64}
 
 Score the simulated paths of one candidate (ϵ, λ) pair against the data. Only paths with at least one jump episode day are scored.
@@ -15,8 +15,15 @@ and in the path, plus `w_κ` times the squared difference between the excess kur
 
 ### Returns
 - `Tuple{Float64,Int64}`: The sum of the scores of the scored paths, and the number of paths that were scored
+
+### Example
+```julia
+paths = JumpHMM.simulate(model, 252; number_of_paths = 20, seed = 5660);
+lags = collect(1:25);
+(total_score, number_scored) = JumpHMM._score_candidate(paths, StatsBase.autocor(abs.(G), lags), StatsBase.kurtosis(G), lags, 0.20);
+```
 """
-function score_candidate(paths::NamedTuple, acf_observed::Array{Float64,1}, κ_observed::Float64,
+function _score_candidate(paths::NamedTuple, acf_observed::Array{Float64,1}, κ_observed::Float64,
     lags::Array{Int64,1}, w_κ::Float64)::Tuple{Float64,Int64}
 
     # initialize -
@@ -56,13 +63,13 @@ end
 """
     tune(model::MyJumpHiddenMarkovModel, growth_rates::Array{Float64,1}; ϵ_range = range(1e-4, 2.5e-2, length = 20),
         λ_range = range(10.0, 160.0, length = 16), number_of_paths::Int64 = 200, number_of_steps::Int64 = 0,
-        w_κ::Float64 = 0.20, p_neg::Float64 = 0.52, N_tail::Int64 = 5, acf_lags::Int64 = 25,
+        w_κ::Float64 = 0.20, p_neg::Float64 = model.p_neg, N_tail::Int64 = model.N_tail, acf_lags::Int64 = 25,
         seed::Union{Int64,Nothing} = nothing) -> MyJumpHiddenMarkovModel
 
 Search a grid of jump settings (`ϵ`, `λ`) for the pair whose simulated paths best match the data. For each pair, we simulate paths and
 compare them with the data on two things: the autocorrelation of the absolute growth rates, and the excess kurtosis of the growth rates.
 The tuned model gets the pair with the lowest mean score. The input model is not changed. If no pair produces a path with a jump episode, we warn
-and return the first pair of the grid.
+and return the first pair of the grid. Before any simulation, we check that every candidate value and the tail settings are valid jump settings.
 
 ### Arguments
 - `model::MyJumpHiddenMarkovModel`: The model to tune. We copy it, and we do not change it
@@ -72,13 +79,13 @@ and return the first pair of the grid.
 - `MyJumpHiddenMarkovModel`: A copy of `model` with the best `ϵ` and `λ`, and with `p_neg` and `N_tail` set to the arguments
 
 ### Optional Arguments
-- `ϵ_range`: The values of `ϵ`, the chance per day that a jump episode starts. Default: `range(1e-4, 2.5e-2, length = 20)`
-- `λ_range`: The candidate values of `λ`, the mean of the Poisson episode length, in trading days. Default: `range(10.0, 160.0, length = 16)`
-- `number_of_paths::Int64`: The number of paths to simulate for each pair. Default: `200`
+- `ϵ_range`: The candidate values of `ϵ`, the probability that a jump episode starts on a given day. Each value is between `0` and `1`. Default: `range(1e-4, 2.5e-2, length = 20)`
+- `λ_range`: The candidate values of `λ`, the mean of the Poisson episode length, in trading days. Each value is above `0`. Default: `range(10.0, 160.0, length = 16)`
+- `number_of_paths::Int64`: The number of paths to simulate for each pair, at least `1`. Default: `200`
 - `number_of_steps::Int64`: The number of days in each path. If `0`, we use the number of days in `growth_rates`. Default: `0`
 - `w_κ::Float64`: The weight of the kurtosis error in the score. Default: `0.20`
-- `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail. Default: `0.52`
-- `N_tail::Int64`: The number of states in each tail that a jump episode can reach. Default: `5`
+- `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail, between `0` and `1`. Default: `model.p_neg`
+- `N_tail::Int64`: The number of states in each tail that a jump episode can reach, at least `1`. Default: `model.N_tail`
 - `acf_lags::Int64`: The number of lags of the autocorrelation. We shorten it if the paths or the data are too short. Default: `25`
 - `seed::Union{Int64,Nothing}`: The seed of the global random number generator. If `nothing`, the generator is not reseeded. Default: `nothing`
 
@@ -91,8 +98,29 @@ tuned = JumpHMM.tune(model, G; ϵ_range = range(1e-4, 5e-3, length = 3), λ_rang
 """
 function tune(model::MyJumpHiddenMarkovModel, growth_rates::Array{Float64,1}; ϵ_range = range(1e-4, 2.5e-2, length = 20),
     λ_range = range(10.0, 160.0, length = 16), number_of_paths::Int64 = 200, number_of_steps::Int64 = 0,
-    w_κ::Float64 = 0.20, p_neg::Float64 = 0.52, N_tail::Int64 = 5, acf_lags::Int64 = 25,
+    w_κ::Float64 = 0.20, p_neg::Float64 = model.p_neg, N_tail::Int64 = model.N_tail, acf_lags::Int64 = 25,
     seed::Union{Int64,Nothing} = nothing)::MyJumpHiddenMarkovModel
+
+    # check the settings before any simulation. Each comparison is false for NaN, so a NaN value is rejected -
+    if (number_of_paths < 1)
+        throw(ArgumentError("number_of_paths must be at least 1, got $(number_of_paths)"));
+    end
+    if (p_neg >= 0.0 && p_neg <= 1.0) == false
+        throw(ArgumentError("p_neg must be between 0 and 1, got $(p_neg)"));
+    end
+    if (N_tail >= 1) == false
+        throw(ArgumentError("N_tail must be at least 1, got $(N_tail)"));
+    end
+    for ϵ_candidate ∈ ϵ_range
+        if (ϵ_candidate >= 0.0 && ϵ_candidate <= 1.0) == false
+            throw(ArgumentError("every value of ϵ_range must be between 0 and 1, got $(ϵ_candidate)"));
+        end
+    end
+    for λ_candidate ∈ λ_range
+        if (λ_candidate > 0.0) == false
+            throw(ArgumentError("every value of λ_range must be greater than 0, got $(λ_candidate)"));
+        end
+    end
 
     # seed the global random number generator, if we were given a seed -
     if (isnothing(seed) == false)
@@ -130,7 +158,7 @@ function tune(model::MyJumpHiddenMarkovModel, growth_rates::Array{Float64,1}; ϵ
 
             # simulate paths from the candidate, and score the paths that have a jump episode -
             paths = simulate(candidate, number_of_steps; number_of_paths = number_of_paths);
-            (total_score, number_scored) = score_candidate(paths, acf_observed, κ_observed, lags, w_κ);
+            (total_score, number_scored) = _score_candidate(paths, acf_observed, κ_observed, lags, w_κ);
 
             # keep this pair if its mean score is the lowest so far -
             if (number_scored > 0)
