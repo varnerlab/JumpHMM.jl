@@ -257,3 +257,355 @@ function _check_copula_growth_rates(growth_rates::Array{Float64,2})
         end
     end
 end
+
+"""
+    build(model::Type{MyGaussianBivariateCopulaModel}, data::NamedTuple) -> MyGaussianBivariateCopulaModel
+
+Build a Gaussian copula for two assets from its parameter.
+
+### Arguments
+- `model::Type{MyGaussianBivariateCopulaModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `ρ::Float64`: The correlation, strictly between `-1` and `1`
+
+### Returns
+- `MyGaussianBivariateCopulaModel`: The copula
+
+### Example
+```julia
+copula = JumpHMM.build(JumpHMM.MyGaussianBivariateCopulaModel, (ρ = 0.5,));
+```
+"""
+function build(model::Type{MyGaussianBivariateCopulaModel}, data::NamedTuple)::MyGaussianBivariateCopulaModel
+
+    # check: the required keys are present -
+    if haskey(data, :ρ) == false
+        throw(ArgumentError("ρ is required"));
+    end
+    ρ = data.ρ;
+
+    # check: the parameters are in range -
+    if (ρ > -1.0 && ρ < 1.0) == false
+        throw(ArgumentError("ρ must be strictly between -1 and 1"));
+    end
+
+    # build an empty model, then fill in the fields -
+    m = MyGaussianBivariateCopulaModel();
+    m.ρ = ρ;
+
+    # return -
+    return m;
+end
+
+"""
+    build(model::Type{MyStudentTBivariateCopulaModel}, data::NamedTuple) -> MyStudentTBivariateCopulaModel
+
+Build a Student-t copula for two assets from its parameter.
+
+### Arguments
+- `model::Type{MyStudentTBivariateCopulaModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `ρ::Float64`: The correlation, strictly between `-1` and `1`
+    - `ν::Float64`: The degrees of freedom, above `0`
+
+### Returns
+- `MyStudentTBivariateCopulaModel`: The copula
+
+### Example
+```julia
+copula = JumpHMM.build(JumpHMM.MyStudentTBivariateCopulaModel, (ρ = 0.5, ν = 5.0));
+```
+"""
+function build(model::Type{MyStudentTBivariateCopulaModel}, data::NamedTuple)::MyStudentTBivariateCopulaModel
+
+    # check: the required keys are present -
+    if haskey(data, :ρ) == false
+        throw(ArgumentError("ρ is required"));
+    end
+    if haskey(data, :ν) == false
+        throw(ArgumentError("ν is required"));
+    end
+    ρ = data.ρ;
+    ν = data.ν;
+
+    # check: the parameters are in range -
+    if (ρ > -1.0 && ρ < 1.0) == false
+        throw(ArgumentError("ρ must be strictly between -1 and 1"));
+    end
+    if (ν > 0.0) == false
+        throw(ArgumentError("ν must be above 0"));
+    end
+
+    # build an empty model, then fill in the fields -
+    m = MyStudentTBivariateCopulaModel();
+    m.ρ = ρ;
+    m.ν = ν;
+
+    # return -
+    return m;
+end
+
+"""
+    build(model::Type{MyClaytonBivariateCopulaModel}, data::NamedTuple) -> MyClaytonBivariateCopulaModel
+
+Build a Clayton copula for two assets from its parameter.
+
+### Arguments
+- `model::Type{MyClaytonBivariateCopulaModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `θ::Float64`: The dependence parameter, above `0`
+
+### Returns
+- `MyClaytonBivariateCopulaModel`: The copula
+
+### Example
+```julia
+copula = JumpHMM.build(JumpHMM.MyClaytonBivariateCopulaModel, (θ = 2.0,));
+```
+"""
+function build(model::Type{MyClaytonBivariateCopulaModel}, data::NamedTuple)::MyClaytonBivariateCopulaModel
+
+    # check: the required keys are present -
+    if haskey(data, :θ) == false
+        throw(ArgumentError("θ is required"));
+    end
+    θ = data.θ;
+
+    # check: the parameters are in range -
+    if (θ > 0.0) == false
+        throw(ArgumentError("θ must be above 0"));
+    end
+
+    # build an empty model, then fill in the fields -
+    m = MyClaytonBivariateCopulaModel();
+    m.θ = θ;
+
+    # return -
+    return m;
+end
+
+"""
+    build(model::Type{MyGumbelBivariateCopulaModel}, data::NamedTuple) -> MyGumbelBivariateCopulaModel
+
+Build a Gumbel copula for two assets from its parameter.
+
+### Arguments
+- `model::Type{MyGumbelBivariateCopulaModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `θ::Float64`: The dependence parameter, at least `1`
+
+### Returns
+- `MyGumbelBivariateCopulaModel`: The copula
+
+### Example
+```julia
+copula = JumpHMM.build(JumpHMM.MyGumbelBivariateCopulaModel, (θ = 2.0,));
+```
+"""
+function build(model::Type{MyGumbelBivariateCopulaModel}, data::NamedTuple)::MyGumbelBivariateCopulaModel
+
+    # check: the required keys are present -
+    if haskey(data, :θ) == false
+        throw(ArgumentError("θ is required"));
+    end
+    θ = data.θ;
+
+    # check: the parameters are in range -
+    if (θ ≥ 1.0) == false
+        throw(ArgumentError("θ must be at least 1"));
+    end
+
+    # build an empty model, then fill in the fields -
+    m = MyGumbelBivariateCopulaModel();
+    m.θ = θ;
+
+    # return -
+    return m;
+end
+
+"""
+    build(model::Type{MyFrankBivariateCopulaModel}, data::NamedTuple) -> MyFrankBivariateCopulaModel
+
+Build a Frank copula for two assets from its parameter.
+
+### Arguments
+- `model::Type{MyFrankBivariateCopulaModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `θ::Float64`: The dependence parameter, not `0`
+
+### Returns
+- `MyFrankBivariateCopulaModel`: The copula
+
+### Example
+```julia
+copula = JumpHMM.build(JumpHMM.MyFrankBivariateCopulaModel, (θ = 3.0,));
+```
+"""
+function build(model::Type{MyFrankBivariateCopulaModel}, data::NamedTuple)::MyFrankBivariateCopulaModel
+
+    # check: the required keys are present -
+    if haskey(data, :θ) == false
+        throw(ArgumentError("θ is required"));
+    end
+    θ = data.θ;
+
+    # check: the parameters are in range -
+    if (isfinite(θ) && θ != 0.0) == false
+        throw(ArgumentError("θ must be finite and not 0"));
+    end
+
+    # build an empty model, then fill in the fields -
+    m = MyFrankBivariateCopulaModel();
+    m.θ = θ;
+
+    # return -
+    return m;
+end
+
+"""
+    build(model::Type{MyVineEdgeModel}, data::NamedTuple) -> MyVineEdgeModel
+
+Build one edge of a vine copula from the two assets, the conditioned assets, and the bivariate copula.
+
+### Arguments
+- `model::Type{MyVineEdgeModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `first::Int64`: The index of the first asset of the edge
+    - `second::Int64`: The index of the second asset of the edge
+    - `conditioned::Array{Int64,1}`: The indices of the assets that the edge is conditioned on
+    - `copula::AbstractBivariateCopulaModel`: The bivariate copula of the edge
+
+### Returns
+- `MyVineEdgeModel`: The edge
+
+### Example
+```julia
+edge = JumpHMM.build(JumpHMM.MyVineEdgeModel, (first = 1, second = 2, conditioned = Int64[], copula = copula));
+```
+"""
+function build(model::Type{MyVineEdgeModel}, data::NamedTuple)::MyVineEdgeModel
+
+    # check: the required keys are present -
+    if haskey(data, :first) == false
+        throw(ArgumentError("first is required"));
+    end
+    if haskey(data, :second) == false
+        throw(ArgumentError("second is required"));
+    end
+    if haskey(data, :conditioned) == false
+        throw(ArgumentError("conditioned is required"));
+    end
+    if haskey(data, :copula) == false
+        throw(ArgumentError("copula is required"));
+    end
+
+    # build an empty model, then fill in the fields -
+    m = MyVineEdgeModel();
+    m.first = data.first;
+    m.second = data.second;
+    m.conditioned = data.conditioned;
+    m.copula = data.copula;
+
+    # return -
+    return m;
+end
+
+"""
+    build(model::Type{MyVineCopulaModel}, data::NamedTuple) -> MyVineCopulaModel
+
+Fit a C-vine copula to the growth rates of several assets. We replace each column of growth rates by its ranks divided by the
+number of rows plus one. We order the assets by the sum of the absolute Kendall's tau with every other asset, largest first.
+Then we build the vine tree by tree. In tree `k`, the `k`-th asset in this order is paired with each later asset, and we pick the
+bivariate copula of each edge by AIC among the Gaussian, Student-t, Clayton, Gumbel, and Frank families.
+
+### Arguments
+- `model::Type{MyVineCopulaModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `growth_rates::Array{Float64,2}`: The growth rates, one row per day and one column per asset. We need at least two columns, at least two rows, and every value must be finite
+
+### Returns
+- `MyVineCopulaModel`: The fitted vine copula
+
+### Example
+```julia
+vine = JumpHMM.build(JumpHMM.MyVineCopulaModel, (growth_rates = R,));
+```
+"""
+function build(model::Type{MyVineCopulaModel}, data::NamedTuple)::MyVineCopulaModel
+
+    # check: the required key is present, and the matrix is usable -
+    if haskey(data, :growth_rates) == false
+        throw(ArgumentError("growth_rates is required"));
+    end
+    growth_rates = data.growth_rates;
+    _check_copula_growth_rates(growth_rates);
+
+    # initialize -
+    U = _uniform_ranks(growth_rates);
+    n, d = size(U);
+
+    # order the assets by the sum of the absolute Kendall's tau with every other asset -
+    tau_sums = zeros(d);
+    for i ∈ 1:d
+        for j ∈ (i+1):d
+            τ = abs(corkendall(U[:, i], U[:, j]));
+            tau_sums[i] += τ;
+            tau_sums[j] += τ;
+        end
+    end
+    order = sortperm(tau_sums, rev = true);
+    V = U[:, order];
+
+    # the pseudo-observations of each asset, which become conditional uniform numbers from tree to tree -
+    pseudo = [V[:, j] for j ∈ 1:d];
+    edges = Array{MyVineEdgeModel,1}[];
+
+    # main loop - one tree at a time -
+    for k ∈ 1:(d-1)
+        tree_edges = MyVineEdgeModel[];
+        new_pseudo = Array{Array{Float64,1},1}(undef, d);
+
+        # the k-th asset is the center of tree k -
+        center_data = pseudo[k];
+        for j ∈ (k+1):d
+            paired_data = pseudo[j];
+
+            # pick the copula of the edge, then build the edge -
+            cop = _select_bicop(center_data, paired_data);
+            edge = build(MyVineEdgeModel, (first = order[k], second = order[j], conditioned = order[1:(k-1)], copula = cop));
+            push!(tree_edges, edge);
+
+            # the conditional uniform numbers of the paired asset, given the center -
+            h_values = zeros(n);
+            for i ∈ 1:n
+                h_values[i] = _bicop_hfunc(cop, paired_data[i], center_data[i]);
+            end
+            new_pseudo[j] = h_values;
+        end
+
+        # the conditional uniform numbers of the center, given the first paired asset -
+        if k < d - 1
+            cop_first = tree_edges[1].copula;
+            h_center = zeros(n);
+            for i ∈ 1:n
+                h_center[i] = _bicop_hfunc(cop_first, center_data[i], pseudo[k+1][i]);
+            end
+            new_pseudo[k] = h_center;
+        end
+
+        # update the pseudo-observations for the next tree -
+        for j ∈ (k+1):d
+            pseudo[j] = new_pseudo[j];
+        end
+        push!(edges, tree_edges);
+    end
+
+    # build an empty model, then fill in the fields -
+    m = MyVineCopulaModel();
+    m.number_of_assets = d;
+    m.order = order;
+    m.edges = edges;
+
+    # return -
+    return m;
+end
