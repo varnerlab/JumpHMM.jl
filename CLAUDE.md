@@ -2,76 +2,62 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Project overview
 
-JumpHMM.jl is a Julia package implementing a Hybrid Hidden Markov Model with Poisson jump-diffusion for generating synthetic equity time series. It reproduces heavy-tailed distributions, negligible linear autocorrelation, and persistent volatility clustering. Based on the paper by Alswaidan & Varner (Cornell University).
+JumpHMM.jl builds a hidden Markov model with jump episodes from the daily growth rates of a stock, and it simulates synthetic growth rates from that model. It also builds models of many assets, with a dependence model that links the assets. The method is in the paper by Alswaidan and Varner (Cornell University). The package is written in the course style, so that the maintainer can read every line.
 
-## Build & Test Commands
+## Commands
 
 ```bash
-# Run all tests
-julia --project test/runtests.jl
-
-# Run tests via Pkg REPL
+# run the full test suite (bounds checking forced on) -
 julia --project -e 'using Pkg; Pkg.test()'
 
-# Run a single test file
-julia --project -e 'using JumpHMM; include("test/test_simulate.jl")'
+# run the full test suite with the default bounds-check mode -
+julia --project -e 'using Pkg; Pkg.test(julia_args=["--check-bounds=auto"])'
 
-# Build documentation locally
+# build the documentation locally -
 julia --project=docs docs/make.jl
 ```
 
-Julia compat: 1.9+
+Julia compat: 1.9+. The documentation build must finish without warnings.
 
-## Architecture
+## Layout
 
-The package follows a pipeline: **Partition → Transition → Emission → Simulate → Validate**, with multi-asset support via copulas or factor models.
+The module file `src/JumpHMM.jl` includes `src/Include.jl`, and it holds every export. The file `src/Include.jl` holds every `using` line and includes the topic files in this order:
 
-### Module inclusion order (order matters — types first, then utilities, then orchestrators):
+- `Types.jl` holds every type: the abstract types and the mutable `My…Model` types.
+- `Finance.jl` holds the growth-rate helpers.
+- `Estimate.jl` holds the partition, transition matrix, and emission estimates.
+- `Factory.jl` holds every `build` method, which constructs a model from a NamedTuple.
+- `Simulate.jl`, `Tune.jl`, `Validate.jl`, and `Decode.jl` hold `simulate`, `tune`, `validate`, and the decoding functions.
+- `Copula.jl`, `Vine.jl`, `SingleIndex.jl`, and `SectorFactor.jl` hold the dependence models.
+- `Portfolio.jl` holds the multi-asset model.
 
-1. **Types.jl** — All abstract and concrete type definitions (immutable structs throughout)
-2. **Finance.jl** — `excess_growth_rates`, `prices_from_growth_rates` helpers
-3. **Partition.jl** — Laplace MLE → equal-probability quantile bins for state discretization
-4. **Transition.jl** — Frequency-counting transition matrix estimation (no EM/Baum-Welch)
-5. **Emission.jl** — Per-state location-scale Student-t fitting with fallback to global stats
-6. **Simulate.jl** — Forward simulation with Poisson-timed tail-state jump excursions
-7. **Decode.jl** — Viterbi (log-space) and forward filtering algorithms
-8. **Tune.jl** — Grid search over (ϵ, λ) minimizing ACF + kurtosis error
-9. **Validate.jl** — Monte Carlo validation via KS, Anderson-Darling, Wasserstein, Hellinger, ACF-MAE
-10. **Copula.jl** — Gaussian and Student-t copulas (PIT → correlation)
-11. **Vine.jl** — C-vine with 5 bivariate families (Gaussian, Student-t, Clayton, Gumbel, Frank) and AIC selection
-12. **SIM.jl** — Single-Index Model for large asset universes
-13. **Portfolio.jl** — Multi-asset orchestration: fits marginal HMMs + dependence structure
+## Course style rules for `src/`
 
-### Key design decisions
+- Every type is a `My…Model` mutable struct with a `build` method in `Factory.jl`. Results, such as reports and sample matrices, are filled inside the function that produces them.
+- Write documented top-level functions with explicit `for` loops and `if` blocks.
+- Do not write inner or nested functions, closures, `do` blocks, ternary chains, `x || throw` or `&& return` one-liners, or `kwargs...` splats.
+- Check inputs with plain `if` blocks that throw an `ArgumentError` naming the input. Read optional keys with `if haskey(data, :key) == true` blocks.
+- Write a comment above each step in the course voice (`# initialize -`, `# main loop -`, `# return -`).
+- Write docstrings in the course order: signature, description, `### Arguments`, `### Returns`, `### Optional Arguments`, and a short example.
+- Use `Array{Float64,1}` and `Array{Float64,2}` in signatures.
+- Write qualified calls in every example: `JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (...))`.
 
-- **All structs are immutable** — `fit`, `tune`, and similar return new instances; nothing is mutated.
-- **No EM algorithm** — Transition estimation uses direct frequency counting; fitting is fast but tuning (grid search) is expensive.
-- **Jump mechanism** — `JumpParameters(ϵ, λ, p_neg, N_tail)` forces the chain into tail states for `Poisson(λ)` steps with probability `ϵ` per timestep. This produces volatility clustering.
-- **Dependence models are interchangeable** — `GaussianCopula`, `StudentTCopula`, `VineCopula`, and `SingleIndexModel` all work as the `dependence` argument to `PortfolioModel`.
-- **All stochastic functions accept a `seed` parameter** for reproducibility.
+## Same numbers as 0.4.1
 
-### Core workflow
+Every result of the package is identical (`==`) to the result of version 0.4.1. A change keeps the arithmetic, the operation order, and the order of the random draws.
 
-```julia
-model = fit(JumpHiddenMarkovModel, prices; rf, N, ν)    # fit marginals
-model = tune(model, prices; ϵ_range, λ_range, n_paths)  # grid search jump params
-result = simulate(model, n_steps; n_paths, seed)         # Monte Carlo paths
-report = validate(model, prices; n_paths, α)             # statistical validation
-```
+The files `test/reference/reference-0.4.1.jld2` and `test/reference/reference-0.4.1-checkbounds.jld2` hold the 0.4.1 results. Bounds checking changes the last bit of some sums, so the test loader picks the checkbounds file when the tests run with bounds checking forced on (`Pkg.test()`), and the other file when they run with `--check-bounds=auto`. Run the tests in both modes before a commit. The file `test/reference/README.md` explains how to regenerate the reference files.
 
-### Type hierarchy
+## Tests
 
-- `AbstractMarkovModel` → `JumpHiddenMarkovModel`
-- `AbstractDependenceModel` → `GaussianCopula`, `StudentTCopula`, `VineCopula`, `SingleIndexModel`
-- `AbstractValidationResult` → `PathTestResult`, `ValidationReport`
-- `AbstractBivariateCopula` → `GaussianBiCopula`, `StudentTBiCopula`, `ClaytonBiCopula`, `GumbelBiCopula`, `FrankBiCopula`
+The file `test/runtests.jl` loads the frozen inputs and references, and it runs every `test/equivalence/test_*.jl` file and then every `test/test_*.jl` file. The equivalence tests compare results with the 0.4.1 references. The unit tests mirror the source files.
 
-## Test Structure
+## Documentation
 
-Tests mirror source modules 1:1 (e.g., `test/test_simulate.jl` tests `src/Simulate.jl`). Each test file defines local helper functions to build test models. Tests use `@testset` blocks and the `Test` stdlib.
+The pages are in `docs/src` and follow the writing rules above: plain sentences, qualified calls, and no course lectures or weeks named. The docs build with Documenter.jl, and the CI server deploys them.
 
 ## Dependencies
 
-Core: `Distributions`, `Statistics`, `StatsBase`, `LinearAlgebra`, `HypothesisTests`, `DataFrames`, `SpecialFunctions`, `PDMats`, `Random`.
+`Distributions`, `Statistics`, `StatsBase`, `LinearAlgebra`, `HypothesisTests`, `DataFrames`, `SpecialFunctions`, `PDMats`, and `Random`.

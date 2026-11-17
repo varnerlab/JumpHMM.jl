@@ -1,93 +1,61 @@
-# JumpHMM.jl
-
 [![CI](https://github.com/varnerlab/JumpHMM.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/varnerlab/JumpHMM.jl/actions/workflows/CI.yml)
 [![Documentation](https://github.com/varnerlab/JumpHMM.jl/actions/workflows/documentation.yml/badge.svg)](https://varnerlab.github.io/JumpHMM.jl/dev/)
 
-`JumpHMM.jl` is a Julia package implementing a Hybrid Hidden Markov Model with Poisson jump-diffusion for generating synthetic equity time series. The package implements the method described in:
+# JumpHMM.jl
+
+The JumpHMM.jl package builds a hidden Markov model with jump episodes from the daily growth rates of a stock, and it simulates synthetic growth rates from that model. It also builds models of many assets, with a dependence model that links the assets. The method is described in:
 
 > Alswaidan A. and Varner J. *Hybrid Hidden Markov Model for Modeling Equity Excess Growth Rate Dynamics: A Discrete-State Approach with Jump-Diffusion*. Cornell University.
 
-## Documentation
-Full documentation is available at: [https://varnerlab.github.io/JumpHMM.jl/dev/](https://varnerlab.github.io/JumpHMM.jl/dev/)
-
 ## Installation
-`JumpHMM.jl` can be installed from the Julia REPL:
+The package can be installed by running the following command in the Julia REPL:
+
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/varnerlab/JumpHMM.jl.git")
+Pkg.add(url = "https://github.com/varnerlab/JumpHMM.jl.git")
 ```
 
-## Single-Asset Example
-```julia
-using JumpHMM
-
-# Load your daily closing prices
-prices = [...]  # Vector{Float64}
-
-# Fit the base model (Laplace partition + transition matrix + Student-t emissions)
-model = fit(JumpHiddenMarkovModel, prices; rf=0.05, N=100, ν=5.0)
-
-# Tune jump parameters (ϵ, λ) via grid search
-model = tune(model, prices;
-    ϵ_range=range(1e-4, 2.5e-2, length=20),
-    λ_range=range(10, 160, length=16),
-    n_paths=200, w_κ=0.20)
-
-# Simulate 1000 synthetic paths of 252 trading days
-result = simulate(model, 252; n_paths=1000, seed=1234)
-
-# Validate against empirical data
-report = validate(model, prices; n_paths=1000)
-println("KS pass rate: $(report.ks_pass_rate)")
-println("Mean ACF-MAE: $(report.mean_acf_mae)")
-
-# Decode hidden states from new observations
-G = excess_growth_rates(new_prices; rf=0.05)
-states = decode(model, G)
-```
-
-## Multi-Asset Portfolio Example
-Three interchangeable dependence models are available behind `AbstractDependenceModel`:
-
-| Model | Dependence | Tail Dependence | Best For |
-|-------|-----------|-----------------|----------|
-| `StudentTCopula` | Full n×n | Yes (via ν) | Realistic portfolios |
-| `GaussianCopula` | Full n×n | None | Simple baseline |
-| `SingleIndexModel` | Through 1 factor | Inherited from market | 100+ asset universes |
-| `HybridSingleIndexModel` | 1 factor + HMM marginals + copula | Yes (from marginals + copula) | Variance-preserving synthetic data |
-| `SectorFactorModel` | Market + sector factors, no copula | From the shared market and sector draws | Sector co-movement with each name's own clustering and jumps |
+## Getting started
+The example below makes a synthetic share price series, builds and tunes a model, and simulates paths. We write the package name in front of every type and function.
 
 ```julia
-using JumpHMM
+import JumpHMM
+using Random
 
-tickers = ["AAPL", "MSFT", "JPM", "XOM", "JNJ"]
-price_matrix = [...]  # (n_obs × 5) matrix
+# make a synthetic share price series: 1000 trading days, more volatile from day 601 to day 700 -
+Random.seed!(1234);
+number_of_days = 1000;
+Δt = 1/252;                 # one trading day, in years
+S = Array{Float64,1}(undef, number_of_days + 1);
+S[1] = 100.0;               # the first share price (USD/share)
+for t ∈ 1:number_of_days
+    σ = 0.15;               # the volatility of a calm day (1/sqrt(year))
+    if t > 600 && t <= 700
+        σ = 0.45;           # the volatility of a volatile day (1/sqrt(year))
+    end
+    # compute the next share price, where 0.08 is the drift of the share price (1/year) -
+    S[t+1] = S[t] * exp((0.08 - 0.5 * σ^2) * Δt + σ * sqrt(Δt) * randn());
+end
 
-# Copula approach (default: Student-t copula)
-portfolio = fit(PortfolioModel, tickers, price_matrix;
-    dependence=StudentTCopula, rf=0.05, N=100)
-portfolio = tune(portfolio, price_matrix)
-result = simulate(portfolio, 252; n_paths=1000)
+g = JumpHMM.excess_growth_rates(S; rf = 0.0, Δt = Δt);  # the growth rates (1/year)
 
-# Single-Index Model approach (for large universes)
-portfolio = fit(PortfolioModel, tickers, price_matrix;
-    dependence=SingleIndexModel, market="SPY", rf=0.05)
+model = JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (
+    growth_rates = g,       # the growth rates (1/year)
+    number_of_states = 20,  # the number of hidden states
+    ν = 5.0                 # the degrees of freedom of the Student-t emissions
+));
 
-# Hybrid SIM approach (variance-corrected, preserves HMM marginals)
-portfolio = fit(PortfolioModel, tickers, price_matrix;
-    dependence=HybridSingleIndexModel, market="SPY", rf=0.05)
+tuned_model = JumpHMM.tune(model, g;
+    ϵ_range = range(1e-3, 5e-3, length = 3),  # the candidate probabilities that an episode starts on a day
+    λ_range = range(10.0, 50.0, length = 3),  # the candidate values of the mean of the Poisson episode length (trading days)
+    number_of_paths = 20,                     # the number of simulated paths for each pair
+    seed = 5660                               # the seed of the random number generator
+);
 
-# Sector factor model (Jump-HMMs of the market, each sector factor, and each name's residual; no copula)
-portfolio = fit(PortfolioModel, tickers, price_matrix;
-    dependence=SectorFactorModel, market="SPY", sectors=sector_labels, rf=0.05)
+paths = JumpHMM.simulate(tuned_model, length(g); number_of_paths = 100, seed = 5660);
 ```
 
-The interface is identical after `fit` — `tune`, `simulate`, and `validate` work the same regardless of the dependence model.
-
-## How It Works
-The model discretizes continuous excess growth rates into `N` states (default 100) using equal-probability quantile bins of a fitted Laplace distribution. A transition matrix is estimated by frequency counting, and per-state Student-t(ν=5) emission distributions capture the observation density. The key innovation is a Poisson jump mechanism: with probability `ϵ` per time step, the chain is forced into tail states for `Poisson(λ)` consecutive steps, producing the persistent volatility clustering observed in real markets.
-
-Only 4 scalar parameters require explicit optimization: `μ` and `b` (Laplace location/scale, fit via MLE), `ϵ` (jump probability), and `λ` (mean jump duration, tuned via grid search).
+The [documentation](https://varnerlab.github.io/JumpHMM.jl/dev/) explains each step and the models of many assets.
 
 ## Disclaimer and Risks
 __This content is offered solely for training and informational purposes__. No offer or solicitation to buy or sell securities or derivative products or any investment or trading advice or strategy is made, given, or endorsed by the teaching team.
@@ -97,5 +65,4 @@ __Trading involves risk__. Carefully review your financial situation before inve
 __You are fully responsible for any investment or trading decisions you make__. Such decisions should be based solely on evaluating your financial circumstances, investment or trading objectives, risk tolerance, and liquidity needs.
 
 ## License
-
 MIT License. See `LICENSE`.
