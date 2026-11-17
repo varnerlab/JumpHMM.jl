@@ -7,6 +7,7 @@ These files freeze what JumpHMM 0.4.1 returns on a fixed set of prices. Tests fo
 - `reference-0.4.1-checkbounds.jld2` holds the same results from a run with bounds checking forced on (`--check-bounds=yes`, the mode `Pkg.test()` uses). Bounds checking changes the last bit of some sums, so the tests load this file in that mode and `reference-0.4.1.jld2` otherwise.
 - The `bicop/...` keys hold each bivariate copula family fit to a positive (`pos`) and a negative (`neg`) dependence pair, with its log-density, h-function, and inverse h-function on a 5 x 5 grid, and the family that AIC selects (`bicop/select/<case>`).
 - The `hybrid_branches/...` keys hold a second hybrid single-index fit with `r2_preserve_threshold = 0.45` and `idiosyncratic_floor = 0.7`, so that the R²-preserving branch (7 tickers) and the beta clip (3 tickers) both run.
+- The `portfolio/simulate/SPY/...` keys hold the market paths (`growth_rates`, `states`, `episodes`) of the same sector-factor simulation as `portfolio/simulate/<ticker>/...`. The first version of the files left them out.
 - `Project.toml` and `Manifest.toml` pin the environment to the 0.4.1 commit `e5821a8`.
 
 ## Regenerate

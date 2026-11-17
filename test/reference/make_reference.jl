@@ -437,6 +437,7 @@ end
     add_portfolios!(ref, P, tickers, sectors)
 
 The sector-factor portfolio (fit, tune, simulate) and the Gaussian-copula portfolio (fit, simulate, validate).
+The sector-factor simulation also stores the market paths under `portfolio/simulate/SPY`, which `result.tickers` leaves out.
 """
 function add_portfolios!(ref::Dict{String,Any}, P::Matrix{Float64}, tickers::Vector{String},
                          sectors::Vector{String})
@@ -448,7 +449,9 @@ function add_portfolios!(ref::Dict{String,Any}, P::Matrix{Float64}, tickers::Vec
     ref["portfolio/tuned/sector_λ"] = [m.jump.λ for m in dep.sector_models]
     ref["portfolio/tuned/own_ϵ"] = [m.jump.ϵ for m in dep.own_models]
     ref["portfolio/tuned/own_λ"] = [m.jump.λ for m in dep.own_models]
-    add_portfolio_simulation!(ref, "portfolio/simulate", simulate(pt, 300; n_paths=3, seed=16))
+    sector_paths = simulate(pt, 300; n_paths=3, seed=16)
+    add_portfolio_simulation!(ref, "portfolio/simulate", sector_paths)
+    add_simulation!(ref, "portfolio/simulate/SPY", sector_paths.results["SPY"])
 
     pg = fit(PortfolioModel, tickers[1:5], P[:, 1:5]; dependence=GaussianCopula, N=20)
     add_portfolio_simulation!(ref, "portfolio_gauss/simulate", simulate(pg, 200; n_paths=2, seed=17))

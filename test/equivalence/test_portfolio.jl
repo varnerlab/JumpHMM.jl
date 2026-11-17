@@ -14,11 +14,10 @@
     @test [m.ϵ for m ∈ dep.own_models] == reference["portfolio/tuned/own_ϵ"]
     @test [m.λ for m ∈ dep.own_models] == reference["portfolio/tuned/own_λ"]
 
-    # the simulated matrices. The reference stores the assets, and the market is one more entry -
+    # the simulated matrices, one set for each ticker, the market included -
     paths = JumpHMM.simulate(pt, 300; number_of_paths = 3, seed = 16)
     @test sort(collect(keys(paths))) == sort(tickers)
-    @test size(paths["SPY"].growth_rates) == (300, 3)
-    for ticker ∈ pt.tickers
+    for ticker ∈ tickers
         @test paths[ticker].growth_rates == reference["portfolio/simulate/" * ticker * "/growth_rates"]
         @test paths[ticker].states == reference["portfolio/simulate/" * ticker * "/states"]
         @test paths[ticker].episodes == reference["portfolio/simulate/" * ticker * "/episodes"]
