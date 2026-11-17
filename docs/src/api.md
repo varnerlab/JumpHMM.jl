@@ -1,139 +1,143 @@
 # API Reference
 
-## Types
-
-### Abstract Types
-```@docs
-JumpHMM.AbstractMarkovModel
-JumpHMM.AbstractDependenceModel
-JumpHMM.AbstractValidationResult
+```@meta
+CurrentModule = JumpHMM
 ```
 
-### Model Types
+This page lists the docstring of every exported type and function. The last section lists the helpers of the sector factor model, which are not exported and are called with the package name.
+
+## Module
+
 ```@docs
-JumpHMM.LaplacePartition
-JumpHMM.StudentTEmission
-JumpHMM.JumpParameters
-JumpHMM.JumpHiddenMarkovModel
+JumpHMM
 ```
 
-### Simulation Types
+## Abstract types
+
 ```@docs
-JumpHMM.SimulationPath
-JumpHMM.SimulationResult
+AbstractMarkovModel
+AbstractDependenceModel
+AbstractBivariateCopulaModel
+AbstractReportModel
 ```
 
-### Validation Types
+## Single-asset model
+
 ```@docs
-JumpHMM.PathTestResult
-JumpHMM.ValidationReport
+MyJumpHiddenMarkovModel
+build(::Type{MyJumpHiddenMarkovModel}, ::NamedTuple)
+laplace_boundaries
+assign_states
+estimate_transition
+stationary_distribution
+estimate_emissions
+sample_emission
+simulate(::MyJumpHiddenMarkovModel, ::Int64)
+tune(::MyJumpHiddenMarkovModel, ::Array{Float64,1})
 ```
 
-### Dependence Models
+## Validation
+
 ```@docs
-JumpHMM.GaussianCopula
-JumpHMM.StudentTCopula
-JumpHMM.VineCopula
-JumpHMM.SingleIndexModel
-JumpHMM.HybridSingleIndexModel
-JumpHMM.SectorFactorModel
+MyValidationReportModel
+validate(::MyJumpHiddenMarkovModel, ::Array{Float64,1})
+wasserstein_distance
+hellinger_distance
 ```
 
-### Bivariate Copula Families
+## Decoding
+
 ```@docs
-JumpHMM.AbstractBivariateCopula
-JumpHMM.GaussianBiCopula
-JumpHMM.StudentTBiCopula
-JumpHMM.ClaytonBiCopula
-JumpHMM.GumbelBiCopula
-JumpHMM.FrankBiCopula
-JumpHMM.VineEdge
+decode
+forward_filter
+log_likelihood
 ```
 
-### Portfolio Types
+## Copulas
+
 ```@docs
-JumpHMM.PortfolioModel
-JumpHMM.PortfolioSimulationResult
+MyGaussianCopulaModel
+MyStudentTCopulaModel
+build(::Type{MyGaussianCopulaModel}, ::NamedTuple)
+build(::Type{MyStudentTCopulaModel}, ::NamedTuple)
+sample_dependence(::MyGaussianCopulaModel, ::Int64)
+sample_dependence(::MyStudentTCopulaModel, ::Int64)
 ```
 
-## Functions
+## Vine copula
 
-### Fitting
 ```@docs
-JumpHMM.fit(::Type{JumpHiddenMarkovModel}, ::AbstractVector{<:Real})
-JumpHMM.fit(::Type{LaplacePartition}, ::AbstractVector{Float64})
-JumpHMM.fit(::Type{GaussianCopula}, ::AbstractMatrix{Float64})
-JumpHMM.fit(::Type{StudentTCopula}, ::AbstractMatrix{Float64})
-JumpHMM.fit(::Type{VineCopula}, ::AbstractMatrix{Float64})
-JumpHMM.fit(::Type{SingleIndexModel}, ::AbstractMatrix{Float64}, ::AbstractVector{Float64})
-JumpHMM.fit(::Type{HybridSingleIndexModel}, ::Vector{String}, ::AbstractMatrix{<:Real}, ::String)
-JumpHMM.fit(::Type{SectorFactorModel}, ::Vector{String}, ::AbstractMatrix{<:Real}, ::String, ::Vector{String})
-JumpHMM.fit(::Type{PortfolioModel}, ::Vector{String}, ::AbstractMatrix{<:Real})
-JumpHMM.assign_states
-JumpHMM.estimate_transition
-JumpHMM.stationary_distribution
-JumpHMM.fit_emissions
-JumpHMM.sample_emission
+MyGaussianBivariateCopulaModel
+MyStudentTBivariateCopulaModel
+MyClaytonBivariateCopulaModel
+MyGumbelBivariateCopulaModel
+MyFrankBivariateCopulaModel
+MyVineEdgeModel
+MyVineCopulaModel
+build(::Type{MyGaussianBivariateCopulaModel}, ::NamedTuple)
+build(::Type{MyStudentTBivariateCopulaModel}, ::NamedTuple)
+build(::Type{MyClaytonBivariateCopulaModel}, ::NamedTuple)
+build(::Type{MyGumbelBivariateCopulaModel}, ::NamedTuple)
+build(::Type{MyFrankBivariateCopulaModel}, ::NamedTuple)
+build(::Type{MyVineEdgeModel}, ::NamedTuple)
+build(::Type{MyVineCopulaModel}, ::NamedTuple)
+sample_dependence(::MyVineCopulaModel, ::Int64)
 ```
 
-### Tuning
+## Single-index models
+
 ```@docs
-JumpHMM.tune(::JumpHiddenMarkovModel, ::AbstractVector{<:Real})
-JumpHMM.tune(::PortfolioModel, ::AbstractMatrix{<:Real})
+MySingleIndexDependenceModel
+MyHybridSingleIndexDependenceModel
+build(::Type{MySingleIndexDependenceModel}, ::NamedTuple)
+build(::Type{MyHybridSingleIndexDependenceModel}, ::NamedTuple)
+sample_dependence(::MySingleIndexDependenceModel, ::Int64)
+sample_dependence(::MyHybridSingleIndexDependenceModel, ::Int64)
 ```
 
-### Simulation
+## Sector factor model
+
 ```@docs
-JumpHMM.simulate(::JumpHiddenMarkovModel, ::Int)
-JumpHMM.simulate(::PortfolioModel, ::Int)
+MySectorFactorModel
+build(::Type{MySectorFactorModel}, ::NamedTuple)
+sample_draws
+compose
+compose_name(::MySectorFactorModel, ::NamedTuple, ::Int64)
+compose_name(::Array{Float64,1}, ::Array{Float64,1}, ::Float64, ::Array{Float64,1}, ::Array{Float64,1}, ::Array{Float64,1})
+with_parameters
+sample_dependence(::MySectorFactorModel, ::Int64)
 ```
 
-### Decoding
+## Portfolio
+
 ```@docs
-JumpHMM.decode
-JumpHMM.forward_filter
-JumpHMM.log_likelihood
+MyPortfolioModel
+build(::Type{MyPortfolioModel}, ::NamedTuple)
+tune(::MyPortfolioModel, ::Array{Float64,2})
+simulate(::MyPortfolioModel, ::Int64)
+validate(::MyPortfolioModel, ::Array{Float64,2})
 ```
 
-### Validation
+## Growth rates
+
 ```@docs
-JumpHMM.validate(::JumpHiddenMarkovModel, ::AbstractVector{<:Real})
-JumpHMM.validate(::PortfolioModel, ::AbstractMatrix{<:Real})
+excess_growth_rates(::Array{Float64,1})
+excess_growth_rates(::Array{Float64,2})
+excess_growth_rates(::Dict{String,DataFrame}, ::Array{String,1})
+prices_from_growth_rates
 ```
 
-### Dependence
-```@docs
-JumpHMM.sample_dependence(::GaussianCopula, ::Int)
-JumpHMM.sample_dependence(::StudentTCopula, ::Int)
-JumpHMM.sample_dependence(::VineCopula, ::Int)
-JumpHMM.sample_dependence(::SingleIndexModel, ::Int)
-JumpHMM.sample_dependence(::HybridSingleIndexModel, ::Int)
-JumpHMM.sample_dependence(::SectorFactorModel, ::Int)
-JumpHMM.sample_draws
-JumpHMM.compose
-JumpHMM.compose_name(::SectorFactorModel, ::Any, ::Int)
-JumpHMM.with_parameters
-```
+## Sector factor helpers
 
-### Finance Helpers
 ```@docs
-JumpHMM.excess_growth_rates(::AbstractVector{<:Real})
-JumpHMM.excess_growth_rates(::AbstractMatrix{<:Real})
-JumpHMM.excess_growth_rates(::Dict{String, DataFrame}, ::Vector{String})
-JumpHMM.prices_from_growth_rates
-```
-
-### Sector Factor Model Internals
-```@docs
-JumpHMM.ema_rate
-JumpHMM.drift_path
-JumpHMM.drift_variance
-JumpHMM.sector_factors
-JumpHMM.loo_loadings
-JumpHMM.sector_loadings
-JumpHMM.own_residuals
-JumpHMM.own_variances
-JumpHMM.own_scale
-JumpHMM.own_scales
-JumpHMM.compose_name(::AbstractVector, ::AbstractVector, ::Real, ::AbstractVector, ::AbstractVector, ::AbstractVector)
+ema_rate
+drift_path
+drift_variance
+sector_factors
+loo_loadings
+sector_loadings
+own_residuals
+own_variances
+own_scale
+own_scales
 ```

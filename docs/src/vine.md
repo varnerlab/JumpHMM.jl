@@ -1,43 +1,49 @@
 # Vine Copula
 
-## Overview
-A vine copula (C-vine) models cross-asset dependence by assigning a **separate bivariate copula** to each pair of assets. Unlike Gaussian or Student-t copulas that apply a single dependence structure uniformly, vine copulas allow heterogeneous dependence — tech stocks can crash together (Clayton, lower tail) while energy-finance pairs have symmetric dependence (Gaussian).
-
-## Bivariate Copula Families
-Five families are available, automatically selected per edge via AIC:
-
-| Family | Tail Dependence | Symmetry | Use Case |
-|--------|----------------|----------|----------|
-| `GaussianBiCopula` | None | Symmetric | Weak/normal dependence |
-| `StudentTBiCopula` | Both tails | Symmetric | Joint crashes + rallies |
-| `ClaytonBiCopula` | Lower tail | Asymmetric | Crash-together, diverge in rallies |
-| `GumbelBiCopula` | Upper tail | Asymmetric | Rally-together, diverge in crashes |
-| `FrankBiCopula` | None | Symmetric | Moderate, no tail dependence |
-
-## How It Works
-The C-vine organizes variables into a tree structure:
-- **Tree 1**: The most connected variable (highest sum of |Kendall's tau|) is the center. Bivariate copulas link it to all other variables.
-- **Tree 2**: Conditional dependencies are modeled using pseudo-observations computed via h-functions from Tree 1.
-- **Trees 3..d-1**: Higher-order conditional dependencies.
-
-Each edge in each tree gets the bivariate family that minimizes AIC, so the model adapts to the specific dependence pattern of each pair.
-
-## Usage
-```julia
-using JumpHMM
-
-# Fit a vine copula from returns
-vc = fit(VineCopula, returns_matrix)
-
-# Sample correlated uniforms
-U = sample_dependence(vc, 1000)
-
-# Use in a portfolio model
-portfolio = fit(PortfolioModel, tickers, price_matrix;
-    dependence=VineCopula, rf=0.05, N=100)
+```@meta
+CurrentModule = JumpHMM
 ```
 
-## When to Use
-- **20-100 assets**: Where heterogeneous dependence matters but copula estimation is still feasible
-- **Sector-diverse portfolios**: Where different sectors have different dependence patterns
-- **Tail-risk analysis**: Where asymmetric tail dependence (crashes vs rallies) is important
+A vine copula builds the dependence of many assets from copulas of two assets, one on each edge of a sequence of trees. Each edge picks its own copula family. Different pairs of assets can then have different kinds of dependence.
+
+The [`MyVineCopulaModel`](@ref) type holds a C-vine, in which each tree has one center asset linked to every later asset.
+
+## Bivariate copula families
+Each edge holds one of five bivariate copula families:
+
+| Type | Parameters | Tail dependence |
+|:---|:---|:---|
+| [`MyGaussianBivariateCopulaModel`](@ref) | the correlation `ρ`, strictly between `-1` and `1` | none |
+| [`MyStudentTBivariateCopulaModel`](@ref) | the correlation `ρ` and the degrees of freedom `ν`, above `0` | both tails |
+| [`MyClaytonBivariateCopulaModel`](@ref) | the dependence parameter `θ`, above `0` | lower tail |
+| [`MyGumbelBivariateCopulaModel`](@ref) | the dependence parameter `θ`, at least `1` | upper tail |
+| [`MyFrankBivariateCopulaModel`](@ref) | the dependence parameter `θ`, finite | none |
+
+Lower tail dependence means that two assets tend to fall together on their worst days. Upper tail dependence means that two assets tend to rise together on their best days. Each family can also be built from its parameters, for example `JumpHMM.build(JumpHMM.MyClaytonBivariateCopulaModel, (θ = 2.0,))`.
+
+## How build fits the vine
+The [`build`](@ref build(::Type{MyVineCopulaModel}, ::NamedTuple)) function fits the vine to a matrix of growth rates, with one row per day and one column per asset, in four steps:
+
+1. __Uniform numbers:__ We replace each column of growth rates by its ranks divided by the number of days plus one.
+2. __Order:__ We order the assets by the sum of the absolute Kendall's tau with every other asset, largest first.
+3. __Tree ``k``:__ The ``k``-th asset in this order is the center of tree ``k``, and it is paired with each later asset. We fit each of the five families to the pair from its Kendall's tau. The edge keeps the family with the smallest Akaike information criterion, two times the number of parameters minus two times the log-likelihood.
+4. __Next tree:__ We replace the uniform numbers of each later asset by their conditional values given the center. Tree ``k + 1`` then describes the dependence that is left after tree ``k``.
+
+The Student-t family also picks its degrees of freedom by log-likelihood. A family whose log-density is not finite on some day is skipped. A vine of ``d`` assets has ``d - 1`` trees, and tree ``k`` has ``d - k`` edges.
+
+```julia
+vine = JumpHMM.build(JumpHMM.MyVineCopulaModel, (growth_rates = R,));   # R: the growth rates (1/year), days × assets
+vine.order                    # the order of the assets in the vine
+vine.edges[1][1].copula       # the bivariate copula of the first edge of tree 1
+```
+
+Each edge is a [`MyVineEdgeModel`](@ref) with the two assets `first` and `second`, the assets it is conditioned on (`conditioned`), and its bivariate copula (`copula`).
+
+## Sample
+The [`sample_dependence`](@ref sample_dependence(::MyVineCopulaModel, ::Int64)) function draws uniform numbers from the vine, with one row per day and one column per asset. For each day, it draws one independent uniform number per asset and passes them through the inverse conditional distributions of the edges, from the last tree back to the first.
+
+The draws come from the global random number generator. A [portfolio](portfolio.md) uses them as it uses the uniform numbers of the other copulas.
+
+```julia
+U = JumpHMM.sample_dependence(vine, 252);   # 252 days × assets, every value strictly between 0 and 1
+```

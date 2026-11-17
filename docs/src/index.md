@@ -1,25 +1,45 @@
 # JumpHMM.jl
 
-`JumpHMM.jl` is a [Julia](https://julialang.org) package implementing a Hybrid Hidden Markov Model with Poisson jump-diffusion for generating synthetic equity time series. The package implements the method described in:
+The JumpHMM.jl package builds a hidden Markov model with jump episodes from the daily growth rates of a stock, and it simulates synthetic growth rates from that model. It also builds models of many assets, with a dependence model that links the assets. The method is described in:
 
 > Alswaidan A. and Varner J. *Hybrid Hidden Markov Model for Modeling Equity Excess Growth Rate Dynamics: A Discrete-State Approach with Jump-Diffusion*. Cornell University.
 
-The model reproduces three canonical stylized facts of financial returns:
-- **Heavy-tailed distributions** (leptokurtosis)
-- **Negligible linear autocorrelation** in raw returns
-- **Persistent volatility clustering** (ARCH effect in absolute returns)
+## Growth rates
+We model growth rates, not share prices. The growth rate of a share price ``S`` over one time step ``\Delta t``, in years, is
 
-## Features
-- Single-asset pipeline: `fit` → `tune` → `simulate` → `validate` → `decode`
-- Four multi-asset dependence models: `GaussianCopula`, `StudentTCopula`, `VineCopula`, `SingleIndexModel`
-- Immutable type system — all fitting/tuning operations return new instances
-- Self-contained — all finance helpers built in
+```math
+g = \frac{1}{\Delta t} \ln\left(\frac{S(t + \Delta t)}{S(t)}\right)
+```
+
+in units of 1/year. The excess growth rate subtracts the risk-free rate ``r_f``, in 1/year, from ``g``.
+
+## Stylized facts
+The model reproduces three stylized facts of the daily growth rates of stocks:
+
+- __Heavy tails:__ Large moves happen more often than a normal distribution allows. The excess kurtosis of the growth rate is above zero.
+- __Little linear autocorrelation:__ The growth rate on one day says almost nothing about the growth rate on the next day.
+- __Volatility clustering:__ Large moves tend to follow large moves. The autocorrelation of the absolute growth rate stays positive for many days.
+
+The hidden Markov model gives the heavy tails and the small linear autocorrelation. Without jump episodes, the autocorrelation of the absolute growth rate in the simulated paths falls to near zero within a few days. The jump episodes add the volatility clustering.
 
 ## Installation
+The package can be installed by running the following command in the Julia REPL:
+
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/varnerlab/JumpHMM.jl.git")
+Pkg.add(url = "https://github.com/varnerlab/JumpHMM.jl.git")
 ```
+
+## Calling the package
+We load the package with `import JumpHMM`, and we write the package name in front of every type and function:
+
+```julia
+import JumpHMM
+
+model = JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (growth_rates = g, number_of_states = 100, ν = 5.0));
+```
+
+The package name keeps these functions apart from functions with the same names in other packages, for example a `build` function in another package you load. Every code example on these pages follows this rule.
 
 ## Disclaimer and Risks
 __This content is offered solely for training and informational purposes__. No offer or solicitation to buy or sell securities or derivative products or any investment or trading advice or strategy is made, given, or endorsed by the teaching team.

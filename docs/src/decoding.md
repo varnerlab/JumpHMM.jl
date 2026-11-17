@@ -1,32 +1,38 @@
 # Decoding
 
-## Overview
-Decoding recovers the most likely hidden state sequence from observed data, or computes filtered state probabilities. All three functions require non-empty observation sequences.
-
-## Viterbi Decoding
-Find the most likely state sequence given observed excess growth rates. Computed entirely in log-space for numerical stability.
-```julia
-G = excess_growth_rates(prices; rf=0.05)
-states = decode(model, G)
-# states is Vector{Int} of length length(G)
+```@meta
+CurrentModule = JumpHMM
 ```
 
-## Forward Filtering
-Compute filtered state probabilities `P(S_t = k | G_{1:t})`. Implemented in log-space with log-sum-exp normalization.
-```julia
-alpha = forward_filter(model, G)
-# alpha is (n_steps × N) matrix, each row sums to 1
+Three functions use a model to analyze a series of growth rates. Each function starts from the stationary distribution on day 1, moves with the transition matrix, and uses the Student-t emission density of each state. The jump settings `ϵ`, `λ`, `p_neg`, and `N_tail` are not used.
+
+The emission density of state ``k`` at the growth rate ``g`` is
+
+```math
+f_k(g) = \frac{1}{\sigma_k}\, f_{\nu}\!\left(\frac{g - \mu_k}{\sigma_k}\right)
 ```
 
-For extreme observations where all emission likelihoods underflow, the filter falls back to a uniform distribution over states rather than returning `NaN`.
+where ``\mu_k`` and ``\sigma_k`` are the location and the scale of state ``k``, and ``f_{\nu}`` is the density of a Student-t distribution with ``\nu`` degrees of freedom. Each function works with logarithms, so that the product of many small probabilities does not round to zero. Each function also throws an `ArgumentError` for an empty array of growth rates.
 
-## Log-Likelihood
-Compute the log-likelihood of an observation sequence under the model. Implemented in log-space with log-sum-exp.
+## Most likely states
+The [`decode`](@ref) function finds the most likely sequence of states for the growth rates, with the Viterbi algorithm. It returns an `Array{Int64,1}` with the state of each day, from `1` to `number_of_states`.
+
 ```julia
-ll = log_likelihood(model, G)
-# ll is a scalar Float64
+states = JumpHMM.decode(model, g);   # the most likely state on each day
 ```
 
-Returns `-Inf` (not `NaN`) when observations are so extreme that no state has nonzero likelihood.
+## State probabilities
+The [`forward_filter`](@ref) function computes the probability of each state on each day, given the growth rates up to that day, ``P(s_t = k \mid g_1, \dots, g_t)``, where ``s_t`` is the state on day ``t``. It returns a matrix with one row for each day and one column for each state, and each row adds to one.
 
-## API
+```julia
+probabilities = JumpHMM.forward_filter(model, g);   # days × states
+```
+
+If every state gives a day a likelihood of zero, that day gets the same probability for every state.
+
+## Log-likelihood
+The [`log_likelihood`](@ref) function computes the log of the probability of the whole series of growth rates under the model, with the forward algorithm. It returns `-Inf` if every state gives some day a likelihood of zero.
+
+```julia
+ll = JumpHMM.log_likelihood(model, g);
+```

@@ -5,11 +5,13 @@ Compute the annualized excess growth rates of a price series: `(1/Δt) * ln(P[t+
 
 ### Arguments
 - `prices::Array{Float64,1}`: The prices, one for each time step
-- `rf::Float64`: The risk-free rate, in 1/year. The default is `0.0`
-- `Δt::Float64`: The time step, in years. The default is `1/252`
 
 ### Returns
 - `Array{Float64,1}`: The growth rates. The array has one fewer element than `prices`
+
+### Optional Arguments
+- `rf::Float64`: The risk-free rate, in 1/year. The default is `0.0`
+- `Δt::Float64`: The time step, in years. The default is `1/252`
 
 ### Example
 ```julia
@@ -38,11 +40,13 @@ Compute the annualized excess growth rates of each column of a price matrix.
 
 ### Arguments
 - `prices::Array{Float64,2}`: The prices. Each row is a time step and each column is an asset
-- `rf::Float64`: The risk-free rate, in 1/year. The default is `0.0`
-- `Δt::Float64`: The time step, in years. The default is `1/252`
 
 ### Returns
 - `Array{Float64,2}`: The growth rates. The array has one fewer row than `prices`
+
+### Optional Arguments
+- `rf::Float64`: The risk-free rate, in 1/year. The default is `0.0`
+- `Δt::Float64`: The time step, in years. The default is `1/252`
 
 ### Example
 ```julia
@@ -76,17 +80,17 @@ Compute the annualized excess growth rates of the tickers in a dictionary of pri
 - `data::Dict{String,DataFrame}`: The price table of each ticker. Every table must have the same number of rows
 - `tickers::Array{String,1}`: The tickers to use. Column `j` of the result is `tickers[j]`
 
+### Returns
+- `Array{Float64,2}`: The growth rates. The array has one fewer row than each price table
+
 ### Optional Arguments
 - `rf::Float64`: The risk-free rate, in 1/year. The default is `0.0`
 - `Δt::Float64`: The time step, in years. The default is `1/252`
 - `price_col::Symbol`: The column of each table that holds the prices. The default is `:close`
 
-### Returns
-- `Array{Float64,2}`: The growth rates. The array has one fewer row than each price table
-
 ### Example
 ```julia
-data = Dict("AAA" => DataFrame(close = [100.0, 101.0, 99.5]));
+data = Dict("AAA" => DataFrames.DataFrame(close = [100.0, 101.0, 99.5]));
 growth_rates = JumpHMM.excess_growth_rates(data, ["AAA"]);
 ```
 """
@@ -116,12 +120,12 @@ Rebuild a price series from excess growth rates and the first price.
 - `growth_rates::Array{Float64,1}`: The annualized excess growth rates
 - `P₀::Float64`: The first price
 
+### Returns
+- `Array{Float64,1}`: The prices. The array has one more element than `growth_rates`
+
 ### Optional Arguments
 - `rf::Float64`: The risk-free rate, in 1/year. The default is `0.0`
 - `Δt::Float64`: The time step, in years. The default is `1/252`
-
-### Returns
-- `Array{Float64,1}`: The prices. The array has one more element than `growth_rates`
 
 ### Example
 ```julia
