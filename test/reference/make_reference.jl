@@ -272,6 +272,47 @@ function add_copulas!(ref::Dict{String,Any}, GA::Matrix{Float64})
     ref["vine/families"] = families
     ref["vine/parameters"] = parameters
     ref["vine/U"] = sample_dependence(vc, 200)
+
+    add_bicops!(ref, GA)
+end
+
+"""
+    add_bicops!(ref, GA)
+
+Each bivariate copula family fit to a positive-dependence pair (`pos`) and a negative-dependence pair (`neg`) of
+pseudo-observations, with its log-density, h-function, and inverse h-function on a 5 x 5 grid, and the family that AIC selects.
+"""
+function add_bicops!(ref::Dict{String,Any}, GA::Matrix{Float64})
+    pits = JumpHMM._pit(GA[:, 2:3])
+    u0 = pits[:, 1]
+    v0 = pits[:, 2]
+    cases = Dict("pos" => (u0, v0), "neg" => (u0, 1.0 .- v0))
+    families = [("gaussian", JumpHMM.GaussianBiCopula), ("studentt", JumpHMM.StudentTBiCopula),
+                ("clayton", JumpHMM.ClaytonBiCopula), ("gumbel", JumpHMM.GumbelBiCopula),
+                ("frank", JumpHMM.FrankBiCopula)]
+    grid = [0.05, 0.25, 0.5, 0.75, 0.95]
+    for case in ["pos", "neg"]
+        u, v = cases[case]
+        for (label, family) in families
+            prefix = "bicop/" * label * "/" * case
+            c = JumpHMM._bicop_fit(family, u, v)
+            ref[prefix * "/parameters"] = family_parameters(c)
+            logpdf = Float64[]
+            hfunc = Float64[]
+            hinv = Float64[]
+            for a in grid
+                for b in grid
+                    push!(logpdf, JumpHMM._bicop_logpdf(c, a, b))
+                    push!(hfunc, JumpHMM._bicop_hfunc(c, a, b))
+                    push!(hinv, JumpHMM._bicop_hinv(c, a, b))
+                end
+            end
+            ref[prefix * "/logpdf"] = logpdf
+            ref[prefix * "/hfunc"] = hfunc
+            ref[prefix * "/hinv"] = hinv
+        end
+        ref["bicop/select/" * case] = family_label(JumpHMM._select_bicop(u, v))
+    end
 end
 
 """

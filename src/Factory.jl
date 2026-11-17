@@ -431,7 +431,7 @@ Build a Frank copula for two assets from its parameter.
 ### Arguments
 - `model::Type{MyFrankBivariateCopulaModel}`: The type to build
 - `data::NamedTuple`: The inputs. The required keys are:
-    - `θ::Float64`: The dependence parameter, not `0`
+    - `θ::Float64`: The dependence parameter, finite
 
 ### Returns
 - `MyFrankBivariateCopulaModel`: The copula
@@ -450,8 +450,8 @@ function build(model::Type{MyFrankBivariateCopulaModel}, data::NamedTuple)::MyFr
     θ = data.θ;
 
     # check: the parameters are in range -
-    if (isfinite(θ) && θ != 0.0) == false
-        throw(ArgumentError("θ must be finite and not 0"));
+    if isfinite(θ) == false
+        throw(ArgumentError("θ must be finite"));
     end
 
     # build an empty model, then fill in the fields -
