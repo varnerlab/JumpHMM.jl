@@ -137,14 +137,13 @@ function estimate_transition(states::Array{Int64,1}, number_of_states::Int64)::A
 end
 
 """
-    stationary_distribution(T::Array{Float64,2}; power::Int64 = 0) -> Array{Float64,1}
+    stationary_distribution(T::Array{Float64,2}) -> Array{Float64,1}
 
 Compute the stationary distribution `π` of a transition matrix, the distribution that satisfies `πT = π`.
 We solve the linear equations of `πT = π` together with the condition that the entries of `π` add to one.
 
 ### Arguments
 - `T::Array{Float64,2}`: The transition matrix
-- `power::Int64`: Not used. It is kept so that code written for version 0.4.1 still runs
 
 ### Returns
 - `Array{Float64,1}`: The stationary distribution
@@ -154,7 +153,7 @@ We solve the linear equations of `πT = π` together with the condition that the
 π̄ = JumpHMM.stationary_distribution(T);
 ```
 """
-function stationary_distribution(T::Array{Float64,2}; power::Int64 = 0)::Array{Float64,1}
+function stationary_distribution(T::Array{Float64,2})::Array{Float64,1}
 
     # initialize -
     number_of_states = size(T, 1);
