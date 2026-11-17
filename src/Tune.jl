@@ -4,7 +4,7 @@
 
 Score the simulated paths of one candidate (ϵ, λ) pair against the data. Only paths with at least one jump episode day are scored.
 The score of a path is the sum of the squared differences between the autocorrelation of the absolute growth rates in the data
-and in the path, plus `w_κ` times the squared difference between the kurtosis in the data and in the path.
+and in the path, plus `w_κ` times the squared difference between the excess kurtosis in the data and in the path.
 
 ### Arguments
 - `paths::NamedTuple`: The output of `simulate`, with the matrices `growth_rates` and `episodes`
@@ -60,7 +60,7 @@ end
         seed::Union{Int64,Nothing} = nothing) -> MyJumpHiddenMarkovModel
 
 Search a grid of jump settings (`ϵ`, `λ`) for the pair whose simulated paths best match the data. For each pair, we simulate paths and
-compare them with the data on two things: the autocorrelation of the absolute growth rates, and the kurtosis of the growth rates.
+compare them with the data on two things: the autocorrelation of the absolute growth rates, and the excess kurtosis of the growth rates.
 The pair with the lowest mean score wins. The input model is not changed. If no pair produces a path with a jump episode, we warn
 and return the first pair of the grid.
 
@@ -73,11 +73,11 @@ and return the first pair of the grid.
 
 ### Optional Arguments
 - `ϵ_range`: The values of `ϵ`, the chance per day that a jump episode starts. Default: `range(1e-4, 2.5e-2, length = 20)`
-- `λ_range`: The values of `λ`, the mean length of a jump episode in days. Default: `range(10.0, 160.0, length = 16)`
+- `λ_range`: The values of `λ`, the rate of the Poisson distribution of the length of a jump episode, in trading days. Default: `range(10.0, 160.0, length = 16)`
 - `number_of_paths::Int64`: The number of paths to simulate for each pair. Default: `200`
 - `number_of_steps::Int64`: The number of days in each path. If `0`, we use the number of days in `growth_rates`. Default: `0`
 - `w_κ::Float64`: The weight of the kurtosis error in the score. Default: `0.20`
-- `p_neg::Float64`: The probability that a jump episode is a crash. Default: `0.52`
+- `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail. Default: `0.52`
 - `N_tail::Int64`: The number of states in each tail that a jump episode can reach. Default: `5`
 - `acf_lags::Int64`: The number of lags of the autocorrelation. We shorten it if the paths or the data are too short. Default: `25`
 - `seed::Union{Int64,Nothing}`: The seed of the global random number generator. If `nothing`, the generator is not reseeded. Default: `nothing`

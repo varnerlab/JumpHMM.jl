@@ -18,7 +18,7 @@ count the moves between states, estimate the emission distribution of each state
 The optional keys of `data` and their defaults are:
 - `ϵ::Float64`: The probability that a jump episode starts at a time step, between `0` and `1`. The default is `0.0`, which means no jumps
 - `λ::Float64`: The rate of the Poisson distribution of the length of a jump episode, above `0`. The default is `1.0`
-- `p_neg::Float64`: The probability that a jump episode moves the asset into the negative tail, between `0` and `1`. The default is `0.52`
+- `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail, between `0` and `1`. The default is `0.52`
 - `N_tail::Int64`: The number of states in each tail that a jump episode can reach, at least `1`. The default is `5`
 - `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
 - `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. The default is `2`
@@ -630,7 +630,7 @@ Fit a single-index model to the growth rates of several assets. For each asset, 
 
 ### Optional Arguments
 The optional keys of `data` and their defaults are:
-- `market_prices::Union{Array{Float64,1},Nothing}`: The prices of the market. If `nothing`, we rebuild prices from `market_growth_rates`, starting at `100.0`, and fit the market model to those. The default is `nothing`
+- `market_prices::Union{Array{Float64,1},Nothing}`: The prices of the market. If `nothing`, we rebuild prices from `market_growth_rates`, starting at `100.0`, and fit the market model to the growth rates of the rebuilt prices. The default is `nothing`
 - `rf::Float64`: The risk-free rate, per year. The default is `0.0`
 - `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
 - `min_obs::Int64`: The fewest growth rates a state of the market model needs to use its own emission estimates. The default is `2`
@@ -769,7 +769,7 @@ The optional keys of `data` and their defaults are:
 - `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
 - `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. The default is `2`
 - `r2_preserve_threshold::Float64`: The R² at or above which the model keeps the R² of the asset. The default is `0.80`
-- `idiosyncratic_floor::Float64`: The smallest share of the variance of an asset that is idiosyncratic. The default is `0.10`
+- `idiosyncratic_floor::Float64`: The smallest fraction of the variance of an asset that is idiosyncratic. The default is `0.10`
 
 ### Example
 ```julia
@@ -937,12 +937,12 @@ end
 """
     build(model::Type{MySectorFactorModel}, data::NamedTuple) -> MySectorFactorModel
 
-Fit a sector factor model from a matrix of prices: `g_i(t) = α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i ε_i(t)`.
+Fit a sector factor model from a matrix of prices: `g_i(t) = α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i (ε_i(t) - ε_center[i])`.
 We regress the growth rates of each asset on the growth rates of the market to get `α`, `β`, `r²`, and the residuals.
 The factor of a sector is the mean residual of its assets (`sector_factors`), and `δ` is the sector loading of each asset (`sector_loadings`).
 The own model of each asset is fit to its residual after the sector term (`own_residuals`).
 
-We build a hidden Markov model of the market prices, of each sector factor, and of each leftover residual. We fit the sector and
+We build a hidden Markov model of the growth rates of the market, of each sector factor, and of each leftover residual. We fit the sector and
 own models to level series that start at `100.0` and compound the factor or residual, with `rf = 0`. The long-run mean
 `ε_center[i]` of own model `i` is the mean of one `center_steps`-day draw, seeded with `center_seed + i`. The scale `ψ` of each own draw
 follows from `own_variances` and the drift of `β` (`own_scale`).
@@ -980,7 +980,7 @@ model = JumpHMM.build(JumpHMM.MySectorFactorModel, (
     tickers = tickers,
     prices = P,
     market = "SPY",
-    sector = sectors,
+    sector = sector,
     number_of_states = 20,
     ν = 5.0
 ));
@@ -1274,7 +1274,7 @@ The optional keys of `data` and their defaults are:
 - `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
 - `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. The default is `2`
 - `residual_method::Symbol`: How a single-index model draws the residuals, either `:bootstrap` or `:gaussian`. The default is `:bootstrap`
-- `sectors::Array{String,1}`: The sector label of each ticker except the market. It is required for the sector factor model. The default is `String[]`
+- `sector::Array{String,1}`: The sector label of each ticker except the market. It is required for the sector factor model. The default is `String[]`
 - `sector_options::NamedTuple`: More optional keys for the build of the sector factor model, for example `(center_steps = 20_000,)`. The default is `NamedTuple()`
 
 ### Example
@@ -1318,7 +1318,7 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
     Δt = 1/252;
     min_obs = 2;
     residual_method = :bootstrap;
-    sectors = String[];
+    sector = String[];
     sector_options = NamedTuple();
     if haskey(data, :market) == true
         market = data.market;
@@ -1335,8 +1335,8 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
     if haskey(data, :residual_method) == true
         residual_method = data.residual_method;
     end
-    if haskey(data, :sectors) == true
-        sectors = data.sectors;
+    if haskey(data, :sector) == true
+        sector = data.sector;
     end
     if haskey(data, :sector_options) == true
         sector_options = data.sector_options;
@@ -1348,7 +1348,7 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
         throw(ArgumentError("tickers has $(length(tickers)) labels but prices has $(number_of_columns) columns"));
     end
 
-    # check: the dependence type is one we know, and the market and sectors it needs are given -
+    # check: the dependence type is one we know, and the market and sector labels it needs are given -
     is_copula = (dependence <: MyGaussianCopulaModel) || (dependence <: MyStudentTCopulaModel) || (dependence <: MyVineCopulaModel);
     is_single_index = dependence <: MySingleIndexDependenceModel;
     is_hybrid = dependence <: MyHybridSingleIndexDependenceModel;
@@ -1362,8 +1362,8 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
         end
     end
     if is_sector == true
-        if isempty(sectors) == true
-            throw(ArgumentError("sectors (one label for each ticker except the market) is required for $(dependence)"));
+        if isempty(sector) == true
+            throw(ArgumentError("sector (one label for each ticker except the market) is required for $(dependence)"));
         end
     end
 
@@ -1469,7 +1469,7 @@ function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioMode
             tickers = tickers,
             prices = prices,
             market = market,
-            sector = sectors,
+            sector = sector,
             number_of_states = number_of_states,
             ν = ν,
             rf = rf,

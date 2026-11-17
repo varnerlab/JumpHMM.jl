@@ -47,11 +47,11 @@ and a jump episode can move the asset into the tails.
 - `emission_μ::Array{Float64,1}`: The location of the Student-t emission distribution of each state
 - `emission_σ::Array{Float64,1}`: The scale of the Student-t emission distribution of each state
 - `emission_n::Array{Int64,1}`: The number of observations used to estimate the emission of each state
-- `emission_fallback::Array{Bool,1}`: `true` if the emission of a state used the fallback estimate because the state had too few observations
+- `emission_fallback::Array{Bool,1}`: A flag that is `true` if a state uses the standard deviation of all growth rates, because the state had fewer than `min_obs` growth rates or a standard deviation below `1e-12`
 - `ν::Float64`: The degrees of freedom of the Student-t emission distributions
 - `ϵ::Float64`: The probability that a jump episode starts at a time step. A value of `0.0` means the model has no jumps
 - `λ::Float64`: The rate of the Poisson distribution of the length of a jump episode
-- `p_neg::Float64`: The probability that a jump episode moves the asset into the negative tail
+- `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail
 - `N_tail::Int64`: The number of states in each tail that a jump episode can reach
 - `Δt::Float64`: The time step of the growth rates, in years
 """
@@ -342,7 +342,7 @@ A copula, fit to the residuals of the single-index fit, links the assets.
 - `market_model::MyJumpHiddenMarkovModel`: The hidden Markov model of the market
 - `tickers::Array{String,1}`: The ordered tickers. The order matches `α`, `β`, and `r²`
 - `r2_preserve_threshold::Float64`: The R² above which the model preserves the R² of the asset
-- `idiosyncratic_floor::Float64`: The smallest share of the variance of an asset that is idiosyncratic
+- `idiosyncratic_floor::Float64`: The smallest fraction of the variance of an asset that is idiosyncratic
 """
 mutable struct MyHybridSingleIndexDependenceModel <: AbstractDependenceModel
 
@@ -366,7 +366,7 @@ end
     mutable struct MySectorFactorModel <: AbstractDependenceModel
 
 The `MySectorFactorModel` mutable struct holds a model with one market model, one model for each sector, and one own model for each asset:
-`g_i(t) = α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i ε_i(t)`.
+`g_i(t) = α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i (ε_i(t) - ε_center[i])`.
 The own model of an asset is fit to the residual of the single-index fit after the sector term.
 The assets are linked only through the market draw and the sector draw on the same day.
 
@@ -429,10 +429,10 @@ end
 """
     mutable struct MyPortfolioModel
 
-The `MyPortfolioModel` mutable struct holds a model of several assets: one hidden Markov model for each asset and a dependence model that links them.
+The `MyPortfolioModel` mutable struct holds a model of several assets: one hidden Markov model for each asset and a dependence model that links the assets.
 
 ### Required fields
-- `tickers::Array{String,1}`: The tickers of the assets. A single-index portfolio leaves the market ticker out
+- `tickers::Array{String,1}`: The tickers of the assets. A portfolio built with a market leaves the market ticker out
 - `marginals::Dict{String,MyJumpHiddenMarkovModel}`: The hidden Markov model of each asset, keyed by ticker
 - `dependence::AbstractDependenceModel`: The model that links the assets
 - `tickers_map::Dict{String,Int64}`: The column of each ticker in the price matrix used to fit the model

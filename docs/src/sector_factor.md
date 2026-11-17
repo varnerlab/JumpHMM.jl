@@ -128,4 +128,4 @@ end
 The [`compose_name`](@ref compose_name(::MySectorFactorModel, ::NamedTuple, ::Int64)) function composes one asset alone, with its own intercept, half-life, or drift scale for that call. Because `compose` reads only the keys it needs, the `draws` can mix the parts of two draws, for example the market from one draw and the sectors from another.
 
 ## Tuning, simulating, and validating
-To tune the market, sector, and own models, build a [portfolio](portfolio.md) with `dependence = JumpHMM.MySectorFactorModel`. The portfolio also simulates and validates the universe. It takes the sector labels as `sectors`, and it passes the other keys of this build in `sector_options`.
+To tune the market, sector, and own models, build a [portfolio](portfolio.md) with `dependence = JumpHMM.MySectorFactorModel`. The portfolio also simulates and validates the universe. The portfolio takes the same `sector` key, and it passes the other keys of this build in `sector_options`.

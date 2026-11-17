@@ -20,7 +20,7 @@ end
 """
     _bicop_hfunc(c::MyGaussianBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the h-function of a Gaussian copula. This is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We map `u` and `v` to standard normal quantiles, and evaluate the closed form with the normal cumulative distribution function. The result is clamped away from `0` and `1`.
+Evaluate the h-function of a Gaussian copula. The h-function is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We map `u` and `v` to standard normal quantiles, and evaluate the closed form with the normal cumulative distribution function. The result is clamped away from `0` and `1`.
 
 ### Arguments
 - `c::MyGaussianBivariateCopulaModel`: The Gaussian copula
@@ -44,7 +44,7 @@ end
 """
     _bicop_hfunc(c::MyStudentTBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the h-function of a Student-t copula. This is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We map `u` and `v` to Student-t quantiles, and evaluate the closed form with the Student-t cumulative distribution function with `ν + 1` degrees of freedom. The result is clamped away from `0` and `1`.
+Evaluate the h-function of a Student-t copula. The h-function is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We map `u` and `v` to Student-t quantiles, and evaluate the closed form with the Student-t cumulative distribution function with `ν + 1` degrees of freedom. The result is clamped away from `0` and `1`.
 
 ### Arguments
 - `c::MyStudentTBivariateCopulaModel`: The Student-t copula
@@ -73,7 +73,7 @@ end
 """
     _bicop_hfunc(c::MyClaytonBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the h-function of a Clayton copula. This is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We evaluate the closed form of the derivative of the Clayton copula with respect to `v`. The result is clamped away from `0` and `1`.
+Evaluate the h-function of a Clayton copula. The h-function is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We evaluate the closed form of the derivative of the Clayton copula with respect to `v`. The result is clamped away from `0` and `1`.
 
 ### Arguments
 - `c::MyClaytonBivariateCopulaModel`: The Clayton copula
@@ -100,7 +100,7 @@ end
 """
     _bicop_hfunc(c::MyGumbelBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the h-function of a Gumbel copula. This is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We evaluate the closed form of the derivative of the Gumbel copula with respect to `v`. The result is clamped away from `0` and `1`.
+Evaluate the h-function of a Gumbel copula. The h-function is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We evaluate the closed form of the derivative of the Gumbel copula with respect to `v`. The result is clamped away from `0` and `1`.
 
 ### Arguments
 - `c::MyGumbelBivariateCopulaModel`: The Gumbel copula
@@ -129,7 +129,7 @@ end
 """
     _bicop_hfunc(c::MyFrankBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the h-function of a Frank copula. This is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We evaluate the closed form of the derivative of the Frank copula with respect to `v`. The result is clamped away from `0` and `1`.
+Evaluate the h-function of a Frank copula. The h-function is the conditional distribution function of the first asset given the second asset, the derivative of the copula with respect to `v`. We evaluate the closed form of the derivative of the Frank copula with respect to `v`. The result is clamped away from `0` and `1`.
 
 ### Arguments
 - `c::MyFrankBivariateCopulaModel`: The Frank copula
@@ -256,7 +256,7 @@ end
 """
     _bicop_hinv(c::MyClaytonBivariateCopulaModel, w::Float64, v::Float64) -> Float64
 
-Evaluate the inverse of the h-function of a Clayton copula. The inverse has no closed form that we trust numerically, so we call `_hinv_bisect`.
+Evaluate the inverse of the h-function of a Clayton copula. The inverse has no closed form that we trust numerically. We find the inverse by bisection with `_hinv_bisect`.
 
 ### Arguments
 - `c::MyClaytonBivariateCopulaModel`: The Clayton copula
@@ -273,7 +273,7 @@ end
 """
     _bicop_hinv(c::MyGumbelBivariateCopulaModel, w::Float64, v::Float64) -> Float64
 
-Evaluate the inverse of the h-function of a Gumbel copula. The inverse has no closed form that we trust numerically, so we call `_hinv_bisect`.
+Evaluate the inverse of the h-function of a Gumbel copula. The inverse has no closed form that we trust numerically. We find the inverse by bisection with `_hinv_bisect`.
 
 ### Arguments
 - `c::MyGumbelBivariateCopulaModel`: The Gumbel copula
@@ -290,7 +290,7 @@ end
 """
     _bicop_hinv(c::MyFrankBivariateCopulaModel, w::Float64, v::Float64) -> Float64
 
-Evaluate the inverse of the h-function of a Frank copula. The inverse has no closed form that we trust numerically, so we call `_hinv_bisect`.
+Evaluate the inverse of the h-function of a Frank copula. The inverse has no closed form that we trust numerically. We find the inverse by bisection with `_hinv_bisect`.
 
 ### Arguments
 - `c::MyFrankBivariateCopulaModel`: The Frank copula
@@ -307,7 +307,7 @@ end
 """
     _bicop_logpdf(c::MyGaussianBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the log of the density of a Gaussian copula at the point `(u, v)`. We use it to compute the AIC of the copula.
+Evaluate the log of the density of a Gaussian copula at the point `(u, v)`. We use the log-density to compute the AIC of the copula.
 
 ### Arguments
 - `c::MyGaussianBivariateCopulaModel`: The Gaussian copula
@@ -332,7 +332,7 @@ end
 """
     _bicop_logpdf(c::MyStudentTBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the log of the density of a Student-t copula at the point `(u, v)`. We use it to compute the AIC of the copula.
+Evaluate the log of the density of a Student-t copula at the point `(u, v)`. We use the log-density to compute the AIC of the copula.
 
 ### Arguments
 - `c::MyStudentTBivariateCopulaModel`: The Student-t copula
@@ -365,7 +365,7 @@ end
 """
     _bicop_logpdf(c::MyClaytonBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the log of the density of a Clayton copula at the point `(u, v)`. We use it to compute the AIC of the copula.
+Evaluate the log of the density of a Clayton copula at the point `(u, v)`. We use the log-density to compute the AIC of the copula.
 
 ### Arguments
 - `c::MyClaytonBivariateCopulaModel`: The Clayton copula
@@ -389,7 +389,7 @@ end
 """
     _bicop_logpdf(c::MyGumbelBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the log of the density of a Gumbel copula at the point `(u, v)`. We use it to compute the AIC of the copula.
+Evaluate the log of the density of a Gumbel copula at the point `(u, v)`. We use the log-density to compute the AIC of the copula.
 
 ### Arguments
 - `c::MyGumbelBivariateCopulaModel`: The Gumbel copula
@@ -423,7 +423,7 @@ end
 """
     _bicop_logpdf(c::MyFrankBivariateCopulaModel, u::Float64, v::Float64) -> Float64
 
-Evaluate the log of the density of a Frank copula at the point `(u, v)`. We use it to compute the AIC of the copula. We return `-Inf` when the density is too small to evaluate.
+Evaluate the log of the density of a Frank copula at the point `(u, v)`. We use the log-density to compute the AIC of the copula. We return `-Inf` when the density is too small to evaluate.
 
 ### Arguments
 - `c::MyFrankBivariateCopulaModel`: The Frank copula
@@ -709,7 +709,7 @@ end
 """
     sample_dependence(model::MyVineCopulaModel, number_of_steps::Int64) -> Array{Float64,2}
 
-Draw dependent uniform numbers from a C-vine copula. For each step we draw one independent uniform number per asset, and push them through the inverse h-functions of the edges, from the last tree back to the first. Then we put the columns back in the order of the assets. The draws come from the global random number generator, so call `Random.seed!` first to repeat a sample.
+Draw dependent uniform numbers from a C-vine copula. For each step we draw one independent uniform number per asset, and push them through the inverse h-functions of the edges, from the last tree back to the first. Then we put the columns back in the order of the assets. The draws come from the global random number generator. To repeat a sample, call `Random.seed!` first.
 
 ### Arguments
 - `model::MyVineCopulaModel`: The vine copula

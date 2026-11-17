@@ -3,7 +3,7 @@
 
 Draw dependent uniform numbers from a Gaussian copula. We draw correlated standard normal numbers with the correlation matrix
 of the model, and then map each normal number to a uniform number with the standard normal cumulative distribution function.
-The draws come from the global random number generator, so call `Random.seed!` first to repeat a sample.
+The draws come from the global random number generator. To repeat a sample, call `Random.seed!` first.
 
 ### Arguments
 - `model::MyGaussianCopulaModel`: The Gaussian copula
@@ -37,7 +37,7 @@ end
 
 Draw dependent uniform numbers from a Student-t copula. We draw correlated Student-t numbers with the correlation matrix and the
 degrees of freedom of the model, and then map each number to a uniform number with the Student-t cumulative distribution function.
-The draws come from the global random number generator, so call `Random.seed!` first to repeat a sample.
+The draws come from the global random number generator. To repeat a sample, call `Random.seed!` first.
 
 ### Arguments
 - `model::MyStudentTCopulaModel`: The Student-t copula

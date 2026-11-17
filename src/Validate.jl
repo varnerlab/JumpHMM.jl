@@ -88,7 +88,7 @@ end
 
 Simulate paths from the model and compare each path with the data. For each path, we compute the Kolmogorov-Smirnov and Anderson-Darling
 p-values, the Wasserstein and Hellinger distances, the mean absolute error in the autocorrelation of the absolute growth rates, and the
-kurtosis. Each path has as many days as `growth_rates`.
+excess kurtosis. Each path has as many days as `growth_rates`.
 
 ### Arguments
 - `model::MyJumpHiddenMarkovModel`: The model to validate

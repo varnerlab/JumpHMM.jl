@@ -4,7 +4,7 @@
 
     # build, tune, and simulate -
     pf = JumpHMM.build(JumpHMM.MyPortfolioModel, (
-        tickers = tickers, prices = P, dependence = JumpHMM.MySectorFactorModel, market = "SPY", sectors = inputs["sectors"],
+        tickers = tickers, prices = P, dependence = JumpHMM.MySectorFactorModel, market = "SPY", sector = inputs["sectors"],
         number_of_states = 20, ν = 5.0, sector_options = (center_steps = 20_000,)))
     pt = JumpHMM.tune(pf, P; ϵ_range = [1e-4, 3e-3], λ_range = [10.0, 100.0], number_of_paths = 5, seed = 15)
     @test pt isa JumpHMM.MyPortfolioModel

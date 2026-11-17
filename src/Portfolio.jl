@@ -12,7 +12,7 @@ does not change with the portfolio you give.
 What we tune depends on the dependence model of the portfolio. A copula portfolio tunes the hidden Markov model of each asset. A single-index
 portfolio also tunes the market model, and a hybrid portfolio tunes the market model and the models of the assets. A sector factor portfolio tunes
 the market model on the market prices, each sector model on its level series, and each own model on its level series. We turn the level series into
-growth rates with `rf = 0.0`, because we built them that way. After tuning, we draw the long-run mean of each own model again, with the same
+growth rates with `rf = 0.0`, because the level series were built with `rf = 0.0`. After tuning, we draw the long-run mean of each own model again, with the same
 `center_steps` and seeds as the portfolio you give. The scales `ψ` of the own draws stay as they are.
 
 ### Arguments
@@ -30,7 +30,7 @@ growth rates with `rf = 0.0`, because we built them that way. After tuning, we d
 - `number_of_paths::Int64`: The number of paths to simulate for each candidate pair. Default: `200`
 - `number_of_steps::Int64`: The number of days of each simulated path. If `0`, we use the number of days of the data. Default: `0`
 - `w_κ::Float64`: The weight of the kurtosis error in the score. Default: `0.20`
-- `p_neg::Float64`: The probability that a jump episode moves into the negative tail. Default: `0.52`
+- `p_neg::Float64`: The probability that a day of a jump episode is in the negative tail. Default: `0.52`
 - `N_tail::Int64`: The number of states in each tail that a jump episode can reach. Default: `5`
 - `acf_lags::Int64`: The number of lags of the autocorrelation. We shorten it if the data is too short. Default: `25`
 - `seed::Union{Int64,Nothing}`: The seed of the global random number generator, set before each model is tuned. If `nothing`, the generator is not reseeded. Default: `nothing`
@@ -191,7 +191,7 @@ The way we draw the paths depends on the dependence model:
   the growth rates of each asset and put them in the order of the ranks of its uniform numbers. The states and episodes stay as they were simulated
 - Single-index and hybrid: We draw the growth rates with `sample_dependence`. The states are `0` and the episodes are `false`, because these
   paths have no states. A hybrid portfolio has `number_of_steps - 1` days, because `sample_dependence` drops the first day
-- Sector factor: We draw a seed for each path from `seed`, and call `sample_dependence` with it. The states of an asset are `0`, and a day
+- Sector factor: We draw a seed for each path from `seed`, and call `sample_dependence` with that seed. The states of an asset are `0`, and a day
   is an episode if the market, the sector, or the own draw of the asset was in a jump episode. The market gets its own states and episodes
 
 ### Arguments
@@ -202,11 +202,11 @@ The way we draw the paths depends on the dependence model:
 - `Dict{String,NamedTuple}`: One entry for each ticker, keyed by ticker. A sector factor portfolio also has an entry for the market. Each entry has three matrices with one row for each day and one column for each path.
     - `growth_rates::Array{Float64,2}`: The simulated growth rates
     - `states::Array{Int64,2}`: The state on each day
-    - `episodes::Array{Bool,2}`: `true` if the day is part of a jump episode
+    - `episodes::Array{Bool,2}`: A flag that is `true` if the day is part of a jump episode
 
 ### Optional Arguments
 - `number_of_paths::Int64`: The number of paths to simulate. Default: `1000`
-- `seed::Union{Int64,Nothing}`: The seed of the global random number generator. If `nothing`, the generator is not reseeded. A sector factor portfolio draws the seed of each path from it. Default: `nothing`
+- `seed::Union{Int64,Nothing}`: The seed of the global random number generator. If `nothing`, the generator is not reseeded. A sector factor portfolio draws the seed of each path from `seed`. Default: `nothing`
 
 ### Example
 ```julia

@@ -27,7 +27,7 @@ We turn the prices into excess growth rates with `rf` and `Δt`. The portfolio s
 
 The dependence model sets which other keys the build needs, and which tickers the portfolio models:
 
-| `dependence` | Needs `market` | Needs `sectors` | Assets in `portfolio.tickers` |
+| `dependence` | Needs `market` | Needs `sector` | Assets in `portfolio.tickers` |
 |:---|:---|:---|:---|
 | `MyGaussianCopulaModel` | no | no | every ticker |
 | `MyStudentTCopulaModel` | no | no | every ticker |
@@ -36,9 +36,7 @@ The dependence model sets which other keys the build needs, and which tickers th
 | `MyHybridSingleIndexDependenceModel` | yes | no | every ticker except the market |
 | `MySectorFactorModel` | yes | yes | every ticker except the market |
 
-The key `market` names the ticker of the market, which must be in `tickers`. For a sector factor portfolio, `sectors` holds one sector label for each ticker except the market.
-
-The sector factor build itself calls this key `sector`. The key `sector_options` passes more keys to the sector factor build, for example `(center_steps = 20_000, β_scale = fill(0.3, 4))`.
+The key `market` names the ticker of the market, which must be in `tickers`. For a sector factor portfolio, the key `sector` holds one sector label for each ticker except the market, as in the sector factor build. The key `sector_options` passes more keys to the sector factor build, for example `(center_steps = 20_000, β_scale = fill(0.3, 4))`.
 
 The single-index model also takes `residual_method`, which the [Single-Index Models](single_index.md) page explains. Every portfolio takes `min_obs`, as the single-asset build does.
 

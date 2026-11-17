@@ -4,7 +4,7 @@
 Simulate synthetic growth rates for the assets of a single-index model. We simulate one path of market growth rates from the market model,
 and then compute the growth rates of each asset as `g_i = α_i + β_i g_m + ε_i`. With the `:bootstrap` residual method, each day's `ε_i` is
 the residual of one training day, and all assets share that day. With the `:gaussian` method, each `ε_i` is a normal draw with standard deviation `σ_ε[i]`.
-The draws come from the global random number generator, so call `Random.seed!` first to repeat a sample.
+The draws come from the global random number generator. To repeat a sample, call `Random.seed!` first.
 
 ### Arguments
 - `model::MySingleIndexDependenceModel`: The single-index model
@@ -59,14 +59,14 @@ If `r²` of an asset is at least `r2_preserve_threshold`, we scale the path so t
 Otherwise, we scale the path to keep the variance of the hidden Markov model of the asset, and we lower `β` if the market part would take
 more than `1 - idiosyncratic_floor` of that variance.
 
-The draws come from the global random number generator, so call `Random.seed!` first to repeat a sample.
+The draws come from the global random number generator. To repeat a sample, call `Random.seed!` first.
 
 ### Arguments
 - `model::MyHybridSingleIndexDependenceModel`: The hybrid single-index model
 - `number_of_steps::Int64`: The number of days to simulate before the first day is dropped
 
 ### Returns
-- `Array{Float64,2}`: The simulated growth rates, with `number_of_steps - 1` rows (days) and one column per asset. The first simulated day is dropped, so the matrix has one row fewer than `number_of_steps`
+- `Array{Float64,2}`: The simulated growth rates, with `number_of_steps - 1` rows (days) and one column per asset. The first simulated day is dropped
 
 ### Example
 ```julia

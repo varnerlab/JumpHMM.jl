@@ -5,7 +5,7 @@
 Simulate synthetic growth rate paths from a jump hidden Markov model. Day 1 of each path starts in a state and emits a growth rate.
 Every later day is an ordinary day or a jump day. On an ordinary day, the model draws the next state from the transition matrix. On a jump day, the model
 jumps into one of the tail states. A jump episode starts with probability `ϵ` on a day and lasts a Poisson(`λ`) number of days.
-An episode length of zero means that day is an ordinary day. An episode that would run past the last day stops at the last day.
+An episode length of zero makes the day an ordinary day. An episode that would run past the last day stops at the last day.
 
 ### Arguments
 - `model::MyJumpHiddenMarkovModel`: The model to simulate from
@@ -15,7 +15,7 @@ An episode length of zero means that day is an ordinary day. An episode that wou
 - `NamedTuple`: Three matrices with one row for each day and one column for each path.
     - `growth_rates::Array{Float64,2}`: The simulated growth rates
     - `states::Array{Int64,2}`: The state on each day
-    - `episodes::Array{Bool,2}`: `true` if the day is part of a jump episode
+    - `episodes::Array{Bool,2}`: A flag that is `true` if the day is part of a jump episode
 
 ### Optional Arguments
 - `number_of_paths::Int64`: The number of paths to simulate. Default: `1000`

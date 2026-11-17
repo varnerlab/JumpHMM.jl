@@ -107,7 +107,8 @@ The tables below write the names without the `JumpHMM.` prefix to save space. Wr
 | `JumpHMM.compose_name(...)` | `compose_name(...)`, now exported |
 | `JumpHMM.with_parameters(model; ...)` | `with_parameters(model; ...)`, now exported |
 | `sample_dependence(sector_model, n; seed)` | `sample_dependence(sector_model, number_of_steps; seed)` |
-| `fit(PortfolioModel, tickers, prices; dependence, market, rf, N, ν, dt, min_obs, residual_method, sectors, sector_options)` | `build(MyPortfolioModel, (tickers, prices, dependence, number_of_states, ν, market, rf, Δt, min_obs, residual_method, sectors, sector_options))`. The key `dependence` is required, where 0.4.1 defaulted to `StudentTCopula` |
+| `fit(PortfolioModel, tickers, prices; dependence, market, rf, N, ν, dt, min_obs, residual_method, sectors, sector_options)` | `build(MyPortfolioModel, (tickers, prices, dependence, number_of_states, ν, market, rf, Δt, min_obs, residual_method, sector, sector_options))`. The key `dependence` is required, where 0.4.1 defaulted to `StudentTCopula` |
+| `fit(PortfolioModel, …; sectors = labels)` | The key `sector = labels`, the same name as in the sector factor build |
 | `tune(portfolio, prices; tickers_map, market_col, ...)` | `tune(portfolio, prices; tickers_map, market_col, ...)`, with the 0.5.0 keyword names |
 | `simulate(portfolio, n_steps; n_paths, seed)` | `simulate(portfolio, number_of_steps; number_of_paths, seed)`, which returns a `Dict{String,NamedTuple}` |
 | `validate(portfolio, prices; tickers_map, ...)` | `validate(portfolio, prices; tickers_map, ...)`, with the 0.5.0 keyword names |

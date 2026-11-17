@@ -1,5 +1,5 @@
 """
-`JumpHMM` fits a hidden Markov model with jump episodes to stock growth rates
+The JumpHMM package builds a hidden Markov model with jump episodes from the growth rates of a stock,
 and simulates synthetic growth rates for one asset or a portfolio.
 """
 module JumpHMM

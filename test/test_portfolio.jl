@@ -4,7 +4,7 @@ struct UnknownDependenceModel <: JumpHMM.AbstractDependenceModel end
 @testset "portfolio models" begin
     P = inputs["prices"][:, 1:6]
     tickers = inputs["tickers"][1:6]
-    sectors = inputs["sectors"][1:5]
+    sector = inputs["sectors"][1:5]
     T = JumpHMM.MyPortfolioModel
     base = (tickers = tickers, prices = P, number_of_states = 20, ν = 5.0)
 
@@ -46,7 +46,7 @@ struct UnknownDependenceModel <: JumpHMM.AbstractDependenceModel end
     # bad inputs are rejected -
     @test_throws ArgumentError JumpHMM.build(T, merge(base, (dependence = JumpHMM.MySingleIndexDependenceModel,)))
     @test_throws ArgumentError JumpHMM.build(T, merge(base, (dependence = JumpHMM.MyHybridSingleIndexDependenceModel,)))
-    @test_throws ArgumentError JumpHMM.build(T, merge(base, (dependence = JumpHMM.MySectorFactorModel, sectors = sectors)))
+    @test_throws ArgumentError JumpHMM.build(T, merge(base, (dependence = JumpHMM.MySectorFactorModel, sector = sector)))
     @test_throws ArgumentError JumpHMM.build(T, merge(base, (dependence = JumpHMM.MySectorFactorModel, market = "SPY")))
     @test_throws ArgumentError JumpHMM.build(T, merge(base, (dependence = JumpHMM.MyGaussianCopulaModel, tickers = tickers[1:5])))
     @test_throws ArgumentError JumpHMM.build(T, merge(base, (dependence = JumpHMM.MySingleIndexDependenceModel, market = "XYZ")))
@@ -82,7 +82,7 @@ struct UnknownDependenceModel <: JumpHMM.AbstractDependenceModel end
 
     # a sector factor portfolio validates each own model on its level series -
     sp = JumpHMM.build(T, (tickers = inputs["tickers"], prices = inputs["prices"], number_of_states = 20, ν = 5.0,
-        dependence = JumpHMM.MySectorFactorModel, market = "SPY", sectors = inputs["sectors"],
+        dependence = JumpHMM.MySectorFactorModel, market = "SPY", sector = inputs["sectors"],
         sector_options = (center_steps = 20_000,)))
     reports = JumpHMM.validate(sp, inputs["prices"]; number_of_paths = 5, seed = 3)
     dep = sp.dependence
