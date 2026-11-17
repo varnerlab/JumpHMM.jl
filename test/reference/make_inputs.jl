@@ -6,14 +6,13 @@
 # alphabetical order. Columns are SPY first, then the 12 stocks grouped by
 # sector (largest sector first).
 #
-# Run: julia --project=test/reference test/reference/make_inputs.jl [universe.jld2] [sectors.csv] [out.jld2]
+# Run: julia --project=test/reference test/reference/make_inputs.jl <universe.jld2> <sectors.csv> [out.jld2]
+# The universe file holds the price tables of the S&P 500 tickers, and the sectors file maps each ticker to its GICS sector.
 
 using JLD2
 using CSV
 using DataFrames
 
-const DEFAULT_UNIVERSE = "/Users/jdv27/Desktop/julia_work/HMM-w-jumps-paper/code/downstream-evaluation/data/universe.jld2"
-const DEFAULT_SECTORS = "/Users/jdv27/Desktop/julia_work/HMM-w-jumps-paper/code/sim-experiment/data/SP500-GICS-Sectors.csv"
 const DEFAULT_OUTPUT = joinpath(@__DIR__, "inputs.jld2")
 
 """
@@ -96,15 +95,14 @@ function main(universe_path::String, sectors_path::String, output_path::String)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    universe_path = DEFAULT_UNIVERSE
-    sectors_path = DEFAULT_SECTORS
+    # the universe and sectors files are required; the output file is optional -
+    if length(ARGS) < 2
+        println("usage: julia --project=test/reference test/reference/make_inputs.jl <universe.jld2> <sectors.csv> [out.jld2]")
+        exit(1)
+    end
+    universe_path = ARGS[1]
+    sectors_path = ARGS[2]
     output_path = DEFAULT_OUTPUT
-    if length(ARGS) >= 1
-        universe_path = ARGS[1]
-    end
-    if length(ARGS) >= 2
-        sectors_path = ARGS[2]
-    end
     if length(ARGS) >= 3
         output_path = ARGS[3]
     end

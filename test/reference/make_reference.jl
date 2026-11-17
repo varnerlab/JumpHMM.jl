@@ -461,6 +461,213 @@ function add_portfolios!(ref::Dict{String,Any}, P::Matrix{Float64}, tickers::Vec
     end
 end
 
+"""
+    once_seeded_gaussian_portfolio(P, tickers) -> (PortfolioModel, Matrix{Float64})
+
+The Gaussian-copula portfolio of the once-seeded keys, fit to the first 301 days of every ticker with 10 states, and its prices.
+"""
+function once_seeded_gaussian_portfolio(P::Matrix{Float64}, tickers::Vector{String})
+    P_short = P[1:301, :]
+    return fit(PortfolioModel, tickers, P_short; dependence=GaussianCopula, N=10), P_short
+end
+
+"""
+    sector_dt_portfolio(P, tickers, sectors) -> PortfolioModel
+
+The sector-factor portfolio whose `sector_options` set a monthly time step, `dt = 1/12`, with 20 states and a short centering draw.
+"""
+function sector_dt_portfolio(P::Matrix{Float64}, tickers::Vector{String}, sectors::Vector{String})
+    return fit(PortfolioModel, tickers, P; dependence=SectorFactorModel, market="SPY", sectors=sectors, N=20,
+               sector_options=(dt=1/12, center_steps=1000))
+end
+
+"""
+    add_once_seeded_portfolios!(ref, P, tickers)
+
+Portfolio tune and validate after one `Random.seed!(7)` and with no `seed` keyword, so that the order in which the portfolio
+visits its models sets the draws of each model. The Gaussian-copula portfolio uses all 13 tickers, and the hybrid portfolio uses
+the first five columns. Both use the first 301 days and 10 states. The hybrid keys hold the portfolio marginals, the hybrid
+model's own marginals (tuned in a second pass, after the market), and the market model.
+"""
+function add_once_seeded_portfolios!(ref::Dict{String,Any}, P::Matrix{Float64}, tickers::Vector{String})
+    pg, P_short = once_seeded_gaussian_portfolio(P, tickers)
+    Random.seed!(7)
+    tuned = tune(pg, P_short; ϵ_range=[0.01, 0.05], λ_range=[2.0, 10.0], n_paths=3, n_steps=80)
+    for ticker in tickers
+        ref["portfolio_once/gauss/tune/" * ticker * "/ϵ"] = tuned.marginals[ticker].jump.ϵ
+        ref["portfolio_once/gauss/tune/" * ticker * "/λ"] = tuned.marginals[ticker].jump.λ
+    end
+    Random.seed!(7)
+    reports = validate(pg, P_short; n_paths=1)
+    for ticker in tickers
+        add_report!(ref, "portfolio_once/gauss/validate/" * ticker, reports[ticker])
+    end
+
+    P_hybrid = P[1:301, 1:5]
+    ph = fit(PortfolioModel, tickers[1:5], P_hybrid; dependence=HybridSingleIndexModel, market="SPY", N=10)
+    Random.seed!(7)
+    th = tune(ph, P_hybrid; ϵ_range=[0.01, 0.05], λ_range=[2.0, 10.0], n_paths=3, n_steps=80)
+    for ticker in ph.tickers
+        ref["portfolio_once/hybrid/tune/marginals/" * ticker * "/ϵ"] = th.marginals[ticker].jump.ϵ
+        ref["portfolio_once/hybrid/tune/marginals/" * ticker * "/λ"] = th.marginals[ticker].jump.λ
+        ref["portfolio_once/hybrid/tune/dependence/" * ticker * "/ϵ"] = th.dependence.marginals[ticker].jump.ϵ
+        ref["portfolio_once/hybrid/tune/dependence/" * ticker * "/λ"] = th.dependence.marginals[ticker].jump.λ
+    end
+    ref["portfolio_once/hybrid/tune/market/ϵ"] = th.dependence.market_model.jump.ϵ
+    ref["portfolio_once/hybrid/tune/market/λ"] = th.dependence.market_model.jump.λ
+end
+
+"""
+    add_sector_dt_portfolio!(ref, P, tickers, sectors)
+
+A sector-factor portfolio whose `sector_options` set `dt = 1/12`, validated with one path and `seed = 7`. Each own model is
+checked on growth rates made with its own `dt`. The keys hold the reports of ADP and AFL.
+"""
+function add_sector_dt_portfolio!(ref::Dict{String,Any}, P::Matrix{Float64}, tickers::Vector{String},
+                                  sectors::Vector{String})
+    p = sector_dt_portfolio(P, tickers, sectors)
+    reports = validate(p, P; n_paths=1, seed=7)
+    for ticker in ["ADP", "AFL"]
+        add_report!(ref, "portfolio_sector_dt/validate/" * ticker, reports[ticker])
+    end
+end
+
+"""
+    add_one_column!(ref, P, GA, tickers)
+
+Copulas fit to one column of growth rates (the vine has no edges), and a hybrid single-index model of the market and one stock,
+sampled on its own and simulated as a portfolio.
+"""
+function add_one_column!(ref::Dict{String,Any}, P::Matrix{Float64}, GA::Matrix{Float64}, tickers::Vector{String})
+    R = GA[:, 2:2]
+
+    gc = fit(GaussianCopula, R)
+    Random.seed!(19)
+    ref["copula_one/gaussian/Σ"] = copy(gc.Σ)
+    ref["copula_one/gaussian/U"] = sample_dependence(gc, 50)
+
+    tc = fit(StudentTCopula, R)
+    Random.seed!(20)
+    ref["copula_one/studentt/Σ"] = copy(tc.Σ)
+    ref["copula_one/studentt/ν"] = tc.ν
+    ref["copula_one/studentt/U"] = sample_dependence(tc, 50)
+
+    vc = fit(VineCopula, R)
+    Random.seed!(21)
+    ref["copula_one/vine/order"] = copy(vc.order)
+    ref["copula_one/vine/number_of_edges"] = sum(length(tree) for tree in vc.edges; init=0)
+    ref["copula_one/vine/U"] = sample_dependence(vc, 50)
+
+    h = fit(HybridSingleIndexModel, tickers[1:2], P[:, 1:2], "SPY"; N=20)
+    Random.seed!(5)
+    ref["hybrid_one/sample"] = sample_dependence(h, 100)
+
+    p = fit(PortfolioModel, tickers[1:2], P[:, 1:2]; dependence=HybridSingleIndexModel, market="SPY", N=20)
+    add_portfolio_simulation!(ref, "hybrid_one/portfolio/simulate", simulate(p, 100; n_paths=2, seed=6))
+end
+
+# ---------------------------------------------------------------------------
+# The corrected Hellinger distance: 0.5.0 counts the largest observation
+# ---------------------------------------------------------------------------
+
+"""
+    corrected_hellinger(x, y) -> Float64
+
+The Hellinger distance with every observation counted. The bins split the range of both samples into `n_bins` equal widths.
+A value `v` falls in bin `floor(Int, (v - lo) / (hi - lo) * n_bins) + 1`, and the largest value goes into the last bin.
+0.4.1's `_hellinger` used a histogram closed on the left, which dropped every value equal to the largest observation.
+"""
+function corrected_hellinger(x::AbstractVector{Float64}, y::AbstractVector{Float64})
+    lo = min(minimum(x), minimum(y))
+    hi = max(maximum(x), maximum(y))
+    if lo == hi
+        return 0.0
+    end
+    n_bins = max(30, round(Int, sqrt(max(length(x), length(y)))))
+    counts_x = zeros(Int, n_bins)
+    for v in x
+        k = floor(Int, (v - lo) / (hi - lo) * n_bins) + 1
+        if k > n_bins
+            k = n_bins
+        end
+        counts_x[k] += 1
+    end
+    counts_y = zeros(Int, n_bins)
+    for v in y
+        k = floor(Int, (v - lo) / (hi - lo) * n_bins) + 1
+        if k > n_bins
+            k = n_bins
+        end
+        counts_y[k] += 1
+    end
+    px = counts_x ./ sum(counts_x)
+    py = counts_y ./ sum(counts_y)
+    return sqrt(0.5 * sum((sqrt.(px) .- sqrt.(py)).^2))
+end
+
+"""
+    patch_hellinger!()
+
+Replace 0.4.1's `JumpHMM._hellinger` with `corrected_hellinger`, so that 0.4.1's `validate` reports the corrected distance on
+the same simulated paths. The method keeps the 0.4.1 signature, so that it replaces the old method. Call the functions that
+use it through `Base.invokelatest`.
+"""
+function patch_hellinger!()
+    @eval JumpHMM _hellinger(x::AbstractVector{Float64}, y::AbstractVector{Float64}) = $(corrected_hellinger)(x, y)
+end
+
+"""
+    add_corrected_report!(ref, prefix, report)
+
+Store the `hellinger` and `mean_hellinger` fields of a report under the original keys with `_corrected` appended.
+"""
+function add_corrected_report!(ref::Dict{String,Any}, prefix::String, report::ValidationReport)
+    ref[prefix * "/hellinger_corrected"] = [r.hellinger for r in report.path_results]
+    ref[prefix * "/mean_hellinger_corrected"] = report.mean_hellinger
+end
+
+"""
+    add_corrected_hellinger!(ref, inputs_path)
+
+Run every `validate` call of this script again, after `patch_hellinger!`, with the same models and the same seeding, and the
+direct distance call. Only the Hellinger values change, because the distance draws no random numbers.
+"""
+function add_corrected_hellinger!(ref::Dict{String,Any}, inputs_path::String)
+    inputs = load(inputs_path)
+    P = inputs["prices"]
+    tickers = String.(inputs["tickers"])
+    sectors = String.(inputs["sectors"])
+    GA = excess_growth_rates(P; rf=0.0, dt=1/252)
+
+    # the single-asset report and the direct call
+    m0 = fit(JumpHiddenMarkovModel, P[:, 1]; N=100, ν=5.0)
+    mj = with_jump(m0, 1e-3, 90.0)
+    add_corrected_report!(ref, "validate", validate(mj, P[:, 1]; n_paths=20, seed=9))
+    ref["distance/hellinger_corrected"] = JumpHMM._hellinger(GA[:, 2], GA[:, 3])
+
+    # the Gaussian-copula portfolio
+    pg = fit(PortfolioModel, tickers[1:5], P[:, 1:5]; dependence=GaussianCopula, N=20)
+    reports = validate(pg, P[:, 1:5]; n_paths=3, seed=18)
+    for ticker in pg.tickers
+        add_corrected_report!(ref, "portfolio_gauss/validate/" * ticker, reports[ticker])
+    end
+
+    # the once-seeded Gaussian-copula portfolio
+    po, P_short = once_seeded_gaussian_portfolio(P, tickers)
+    Random.seed!(7)
+    reports = validate(po, P_short; n_paths=1)
+    for ticker in tickers
+        add_corrected_report!(ref, "portfolio_once/gauss/validate/" * ticker, reports[ticker])
+    end
+
+    # the sector-factor portfolio with a monthly time step
+    ps = sector_dt_portfolio(P, tickers, sectors)
+    reports = validate(ps, P; n_paths=1, seed=7)
+    for ticker in ["ADP", "AFL"]
+        add_corrected_report!(ref, "portfolio_sector_dt/validate/" * ticker, reports[ticker])
+    end
+end
+
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
@@ -500,17 +707,25 @@ function build_reference(inputs_path::String)
     add_sector_model!(ref, G, sector_fit[1])
 
     add_portfolios!(ref, P, tickers, sectors)
+
+    # keys added after the first release of the files. They come after every earlier key, so that the earlier keys keep their draws
+    add_once_seeded_portfolios!(ref, P, tickers)
+    add_sector_dt_portfolio!(ref, P, tickers, sectors)
+    add_one_column!(ref, P, GA, tickers)
     return ref
 end
 
 """
     main(inputs_path, output_path)
 
-Build the reference values and write them to `output_path`.
+Build the reference values and write them to `output_path`. The corrected Hellinger keys come last: we patch 0.4.1's
+`_hellinger` only after every other key is made, and run the `validate` calls again in the newest world.
 """
 function main(inputs_path::String, output_path::String)
     started = time()
     ref = build_reference(inputs_path)
+    patch_hellinger!()
+    Base.invokelatest(add_corrected_hellinger!, ref, inputs_path)
     save(output_path, ref)
     println("wrote ", output_path)
     println("keys: ", length(ref))

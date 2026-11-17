@@ -8,7 +8,13 @@ These files freeze what JumpHMM 0.4.1 returns on a fixed set of prices. Tests fo
 - The `bicop/...` keys hold each bivariate copula family fit to a positive (`pos`) and a negative (`neg`) dependence pair, with its log-density, h-function, and inverse h-function on a 5 x 5 grid, and the family that AIC selects (`bicop/select/<case>`).
 - The `hybrid_branches/...` keys hold a second hybrid single-index fit with `r2_preserve_threshold = 0.45` and `idiosyncratic_floor = 0.7`, so that the R²-preserving branch (7 tickers) and the beta clip (3 tickers) both run.
 - The `portfolio/simulate/SPY/...` keys hold the market paths (`growth_rates`, `states`, `episodes`) of the same sector-factor simulation as `portfolio/simulate/<ticker>/...`. The first version of the files left them out.
+- The `portfolio_once/...` keys hold a Gaussian copula portfolio (`gauss`, the first 301 days) and a hybrid portfolio (`hybrid`, the first five columns) that were tuned and validated after one `Random.seed!(7)`, with no `seed` keyword. These keys pin the order in which a portfolio visits its models. The hybrid keys hold the portfolio's models (`marginals`), the hybrid model's own models (`dependence`), and the market model.
+- The `portfolio_sector_dt/...` keys hold the validation of a sector-factor portfolio built with `sector_options = (dt = 1/12, center_steps = 1000)`, for two tickers.
+- The `copula_one/...` and `hybrid_one/...` keys hold the Gaussian, Student-t, and vine copulas of one column, and a hybrid model of the market and one stock with its portfolio paths.
+- The keys that end in `hellinger_corrected` or `mean_hellinger_corrected` hold the Hellinger distances of the same validation runs, computed with a corrected histogram that counts the largest value. Version 0.4.1 left the largest value out of its histogram, and version 0.5.0 counts it. The script patches the corrected function into 0.4.1 at the end of the run, after every other key is written, so that the other keys keep the 0.4.1 numbers.
 - `Project.toml` and `Manifest.toml` pin the environment to the 0.4.1 commit `e5821a8`.
+
+The equivalence tests compare with `==`, so they run only when the Julia version and the loaded Distributions, StatsBase, and SpecialFunctions versions equal the versions in `Manifest.toml`. Otherwise `test/runtests.jl` prints one line that names each version that differs, skips the equivalence tests, and runs the unit tests.
 
 ## Regenerate
 
@@ -16,12 +22,12 @@ Run these commands from the package root:
 
 ```bash
 julia --project=test/reference -e 'using Pkg; Pkg.instantiate()'
-julia --project=test/reference test/reference/make_inputs.jl
+julia --project=test/reference test/reference/make_inputs.jl <universe.jld2> <sectors.csv>
 julia --project=test/reference test/reference/make_reference.jl
 julia --check-bounds=yes --project=test/reference test/reference/make_reference.jl test/reference/inputs.jld2 test/reference/reference-0.4.1-checkbounds.jld2
 ```
 
-`make_inputs.jl` reads the paper repository's universe and sector files. The default paths are at the top of the script. It picks the four sectors with the most tickers, and the first three tickers of each sector in alphabetical order.
+The script `make_inputs.jl` reads a universe file of price tables and a CSV file of GICS sectors, given as its first two arguments. It picks the four sectors with the most tickers, and the first three tickers of each sector in alphabetical order.
 
 ## Check that the reference is reproducible
 
