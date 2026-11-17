@@ -29,4 +29,7 @@ module JumpHMM
 
     # simulate synthetic growth rates -
     export simulate
+
+    # tune the jump settings -
+    export tune
 end
