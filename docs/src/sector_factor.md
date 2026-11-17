@@ -128,17 +128,21 @@ end
 The [`compose_name`](@ref compose_name(::MySectorFactorModel, ::NamedTuple, ::Int64)) function composes one asset alone, with its own intercept, half-life, or drift scale for that call. Because `compose` reads only the keys it needs, the `draws` can mix the parts of two draws, for example the market from one draw and the sectors from another.
 
 ## Changing a fitted model
-The build computes the long-run mean ``\bar{\varepsilon}_i`` (`ε_center`) and the own scale ``\psi_i`` (`ψ`) from the fitted models. Change the intercepts and the drift of ``\beta`` with [`with_parameters`](@ref), which recomputes ``\psi``.
+The build computes the long-run mean ``\bar{\varepsilon}_i`` (`ε_center`) from the fitted own models, and the own scale ``\psi_i`` (`ψ`) from the variances of the data and the drift of ``\beta``. Change the intercepts and the drift of ``\beta`` with [`with_parameters`](@ref), which recomputes ``\psi``.
 
 The functions `compose` and `compose_name` compute the own scale again from the variances. A value written into `ψ` by hand therefore has no effect.
 
-After you change the jump settings or the emissions of the market model, a sector model, or an own model, call the build again with the keys `market_model`, `sector_models`, and `own_models`. The new build computes `ε_center` and `ψ` from the changed models:
+After you change the jump settings or the emissions of the market model, a sector model, or an own model, call the build again with the keys `market_model`, `sector_models`, and `own_models`. The new build computes `ε_center` from the changed models. The rebuild must repeat the settings of the first build, because every key it leaves out takes its default:
 
 ```julia
 own_models = deepcopy(model.own_models);
 own_models[1].ϵ = 2e-3;          # the probability that a jump episode starts on a given day, for the first asset
 rebuilt = JumpHMM.build(JumpHMM.MySectorFactorModel, (
     tickers = tickers, prices = prices, market = "SPY", sector = sector, number_of_states = 100, ν = 5.0,
+    β_scale = model.β_scale,              # the settings of the first build
+    β_halflife = model.β_halflife,
+    center_steps = model.center_steps,
+    center_seed = model.center_seed,
     market_model = model.market_model, sector_models = model.sector_models, own_models = own_models
 ));
 ```

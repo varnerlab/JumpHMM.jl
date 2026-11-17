@@ -4,7 +4,7 @@
 CurrentModule = JumpHMM
 ```
 
-Version 0.5.0 renames the types, functions, and settings of version 0.4.1, and every model is now made with one `build` function. The old names are gone, with no aliases. With the same inputs and seeds, version 0.5.0 gives the same numbers as version 0.4.1, except for the Hellinger distance.
+Version 0.5.0 renames the types, functions, and settings of version 0.4.1, and every model is now made with one `build` function. The old names are gone, with no aliases. With the same inputs and seeds, version 0.5.0 gives the same numbers as version 0.4.1, except for the three changes in [Numbers that differ from 0.4.1](@ref).
 
 ## General rules
 Most changes follow a few rules:
@@ -17,6 +17,13 @@ Most changes follow a few rules:
 - __Exact types:__ Scalars are `Float64` or `Int64`, and arrays are `Array{Float64,1}` or `Array{Float64,2}`. A function argument such as `126` where the function expects a `Float64`, or a view of an array, throws an error. Write `126.0` everywhere, including the keys of `build`.
 
 The tables below write the names without the `JumpHMM.` prefix to save space. Write the prefix in your code.
+
+## Numbers that differ from 0.4.1
+Three results differ from version 0.4.1 on purpose:
+
+- __Hellinger distance:__ The function `hellinger_distance` counts every value of the two samples, where the 0.4.1 histogram left out the largest value.
+- __Tail settings in tune:__ The function `tune` keeps the `p_neg` and `N_tail` of the input model when the call does not pass them, where version 0.4.1 reset them to `0.52` and `5`.
+- __Frank copula at θ = 0:__ A Frank copula with `θ = 0.0` uses the formulas of the independence copula, where in version 0.4.1 the h-function returned `NaN`, its inverse returned a meaningless `3.8e-9` from bisection, and the log-density was `-Inf`, so the vine fit never selected such an edge.
 
 ## Types
 
@@ -90,7 +97,7 @@ The tables below write the names without the `JumpHMM.` prefix to save space. Wr
 | `log_likelihood(model, observations)` | `log_likelihood(model, growth_rates)` |
 | `JumpHMM._wasserstein1(x, y)` | `wasserstein_distance(x, y)` |
 | `JumpHMM._hellinger(x, y)` | `hellinger_distance(x, y)` |
-| `JumpHMM._hellinger(x, y)` left the largest value of the two samples out of its histogram | `hellinger_distance(x, y)` counts the largest value in the last bin. The Hellinger distances differ from 0.4.1, including the `hellinger` and `mean_hellinger` fields of a validation report. No other number differs |
+| `JumpHMM._hellinger(x, y)` left the largest value of the two samples out of its histogram | `hellinger_distance(x, y)` counts the largest value in the last bin. The Hellinger distances differ from 0.4.1, including the `hellinger` and `mean_hellinger` fields of a validation report |
 | `excess_growth_rates(prices; rf, dt)`, all three methods | `excess_growth_rates(prices; rf, Δt)` |
 | `prices_from_growth_rates(G, P0; rf, dt)` | `prices_from_growth_rates(growth_rates, P₀; rf, Δt)` |
 | `fit(GaussianCopula, returns)` | `build(MyGaussianCopulaModel, (growth_rates = R,))` |

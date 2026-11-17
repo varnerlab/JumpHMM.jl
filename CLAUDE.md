@@ -46,7 +46,11 @@ The module file `src/JumpHMM.jl` includes `src/Include.jl`, and it holds every e
 
 ## Same numbers as 0.4.1
 
-Every result of the package is identical (`==`) to the result of version 0.4.1, except the Hellinger distance. The function `hellinger_distance` counts the largest value of the two samples, which the 0.4.1 histogram left out. The `hellinger` and `mean_hellinger` fields of a validation report therefore differ from 0.4.1.
+Every result of the package is identical (`==`) to the result of version 0.4.1, except for three deliberate changes:
+
+- The function `hellinger_distance` counts every value of the two samples, where the 0.4.1 histogram left out the largest value, so the `hellinger` and `mean_hellinger` fields of a validation report differ.
+- The function `tune` keeps the `p_neg` and `N_tail` of the input model when the call does not pass them, where version 0.4.1 reset them to `0.52` and `5`.
+- A Frank copula with `θ = 0.0` uses the formulas of the independence copula, where in version 0.4.1 the h-function returned `NaN`, its inverse a meaningless `3.8e-9`, and the log-density `-Inf`, so the vine fit never selected such an edge.
 
 A change keeps the arithmetic, the operation order, and the order of the random draws.
 

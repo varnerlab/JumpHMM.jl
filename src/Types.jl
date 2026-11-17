@@ -385,7 +385,7 @@ The own model of an asset is fit to the residual of the single-index fit after t
 The assets are linked only through the market draw and the sector draw on the same day.
 
 To change the intercepts or the drift of `β`, use `with_parameters`. After changing the market model, a sector model, or an own model,
-call `build` again with the keys `market_model`, `sector_models`, and `own_models`, so that `ε_center` and `ψ` are computed from the changed models.
+call `build` again with the keys `market_model`, `sector_models`, and `own_models`, so that `ε_center` is computed from the changed models.
 
 ### Required fields
 - `tickers::Array{String,1}`: The assets, without the market, in fit order

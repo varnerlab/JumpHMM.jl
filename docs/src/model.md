@@ -84,4 +84,4 @@ model_with_jumps.ϵ = 2e-3;      # the probability that a jump episode starts on
 model_with_jumps.λ = 40.0;      # the mean of the Poisson episode length, in trading days
 ```
 
-A sector factor model needs more care, because the build computes `ε_center` and `ψ` from its fitted models. The [Sector Factor Model](sector_factor.md#Changing-a-fitted-model) page explains the steps.
+A sector factor model needs more care, because the build computes `ε_center` from its fitted own models. The [Sector Factor Model](sector_factor.md#Changing-a-fitted-model) page explains the steps.
