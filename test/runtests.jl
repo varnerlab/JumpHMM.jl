@@ -2,23 +2,18 @@ using JumpHMM
 using Test
 using Random
 using Statistics
-using Distributions
 using LinearAlgebra
-using StatsBase: corspearman
 
-# resolve ambiguity: JumpHMM.fit vs Distributions.fit
-const fit = JumpHMM.fit
+# load the frozen 0.4.1 inputs and outputs -
+include(joinpath(@__DIR__, "equivalence", "helpers.jl"));
+inputs = load_inputs();
+reference = load_reference();
 
-include("test_finance.jl")
-include("test_partition.jl")
-include("test_transition.jl")
-include("test_emission.jl")
-include("test_simulate.jl")
-include("test_decode.jl")
-include("test_tune.jl")
-include("test_validate.jl")
-include("test_copula.jl")
-include("test_vine.jl")
-include("test_sim.jl")
-include("test_sector_factor.jl")
-include("test_portfolio.jl")
+# run every equivalence test file, then every unit test file -
+for folder ∈ [joinpath(@__DIR__, "equivalence"), @__DIR__]
+    for name ∈ sort(readdir(folder))
+        if startswith(name, "test_") && endswith(name, ".jl")
+            include(joinpath(folder, name));
+        end
+    end
+end

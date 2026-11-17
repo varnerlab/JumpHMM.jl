@@ -1,136 +1,118 @@
-# --- Abstract Types -------------------------------------------------------
-"""Supertype for all Markov models in the package."""
+# --- Abstract types ---------------------------------------------------------------------------------------------------- #
+
+"""
+    abstract type AbstractMarkovModel
+
+Supertype for the hidden Markov models in `JumpHMM`.
+"""
 abstract type AbstractMarkovModel end
 
-"""Supertype for copula-based and factor-based dependence models."""
+"""
+    abstract type AbstractDependenceModel
+
+Supertype for the models that describe how the growth rates of several assets depend on each other.
+"""
 abstract type AbstractDependenceModel end
 
-"""Supertype for validation report types."""
-abstract type AbstractValidationResult end
-
-# --- State Partition -------------------------------------------------------
 """
-    LaplacePartition
+    abstract type AbstractBivariateCopulaModel
 
-Discretization of continuous observations into N states using equal-probability
-quantile bins of a fitted Laplace distribution.
+Supertype for the two-variable copula families used as the building blocks of a vine copula.
 """
-struct LaplacePartition
-    μ::Float64
-    b::Float64
-    N::Int
-    boundaries::Vector{Float64}
+abstract type AbstractBivariateCopulaModel end
 
-    function LaplacePartition(μ::Float64, b::Float64, N::Int)
-        @assert N ≥ 1 "N must be ≥ 1"
-        @assert b > 0.0 "b must be positive"
-        cutoffs = range(0.0, 1.0, length=N + 1) |> collect
-        d = Laplace(μ, b)
-        boundaries = [quantile(d, p) for p in cutoffs]
-        boundaries[1] = -Inf
-        boundaries[end] = Inf
-        return new(μ, b, N, boundaries)
-    end
-end
-
-# --- Emission Distributions ------------------------------------------------
 """
-    StudentTEmission
+    abstract type AbstractReportModel
 
-Per-state emission: location-scale Student-t.
-    G_t | S_t = k  ~  μ_k + σ_k × t_ν
+Supertype for the models that hold the results of a validation run.
 """
-struct StudentTEmission
-    μ::Float64
-    σ::Float64
+abstract type AbstractReportModel end
+
+# --- Jump hidden Markov model ------------------------------------------------------------------------------------------ #
+
+"""
+    mutable struct MyJumpHiddenMarkovModel <: AbstractMarkovModel
+
+The `MyJumpHiddenMarkovModel` mutable struct holds a hidden Markov model of the growth rates of one asset.
+The states partition the growth rates, each state emits growth rates from a Student-t distribution,
+and a jump episode can move the asset into the tails.
+
+### Required fields
+- `number_of_states::Int64`: The number of states of the model
+- `laplace_μ::Float64`: The location of the Laplace distribution that sets the state boundaries
+- `laplace_b::Float64`: The scale of the Laplace distribution that sets the state boundaries
+- `boundaries::Array{Float64,1}`: The `number_of_states + 1` edges of the states. The first edge is `-Inf` and the last edge is `Inf`
+- `transition::Array{Float64,2}`: The transition matrix. Row `i` holds the probabilities of moving from state `i` to each state
+- `stationary::Array{Float64,1}`: The stationary distribution of the transition matrix
+- `emission_μ::Array{Float64,1}`: The location of the Student-t emission distribution of each state
+- `emission_σ::Array{Float64,1}`: The scale of the Student-t emission distribution of each state
+- `emission_n::Array{Int64,1}`: The number of observations used to estimate the emission of each state
+- `emission_fallback::Array{Bool,1}`: `true` if the emission of a state used the fallback estimate because the state had too few observations
+- `ν::Float64`: The degrees of freedom of the Student-t emission distributions
+- `ϵ::Float64`: The probability that a jump episode starts at a time step. A value of `0.0` means the model has no jumps
+- `λ::Float64`: The rate of the Poisson distribution of the length of a jump episode
+- `p_neg::Float64`: The probability that a jump episode moves the asset into the negative tail
+- `N_tail::Int64`: The number of states in each tail that a jump episode can reach
+- `Δt::Float64`: The time step of the growth rates, in years
+"""
+mutable struct MyJumpHiddenMarkovModel <: AbstractMarkovModel
+
+    # data -
+    number_of_states::Int64
+    laplace_μ::Float64
+    laplace_b::Float64
+    boundaries::Array{Float64,1}
+    transition::Array{Float64,2}
+    stationary::Array{Float64,1}
+    emission_μ::Array{Float64,1}
+    emission_σ::Array{Float64,1}
+    emission_n::Array{Int64,1}
+    emission_fallback::Array{Bool,1}
     ν::Float64
-    n_obs::Int
-    is_fallback::Bool
-end
-
-# --- Jump Parameters -------------------------------------------------------
-"""
-    JumpParameters
-
-Poisson-driven jump mechanism that forces the chain into tail states.
-"""
-struct JumpParameters
     ϵ::Float64
     λ::Float64
     p_neg::Float64
-    N_tail::Int
+    N_tail::Int64
+    Δt::Float64
 
-    function JumpParameters(ϵ::Float64, λ::Float64;
-                            p_neg::Float64=0.52, N_tail::Int=5)
-        @assert 0.0 ≤ ϵ ≤ 1.0 "ϵ must be in [0, 1]"
-        @assert λ > 0.0 "λ must be positive"
-        @assert 0.0 ≤ p_neg ≤ 1.0 "p_neg must be in [0, 1]"
-        @assert N_tail ≥ 1 "N_tail must be ≥ 1"
-        return new(ϵ, λ, p_neg, N_tail)
-    end
+    # constructor -
+    MyJumpHiddenMarkovModel() = new();
 end
 
-# --- The Model -------------------------------------------------------------
-"""
-    JumpHiddenMarkovModel <: AbstractMarkovModel
-
-Fitted single-asset Jump-HMM. Immutable — fitting/tuning return new instances.
-"""
-struct JumpHiddenMarkovModel <: AbstractMarkovModel
-    partition::LaplacePartition
-    transition::Matrix{Float64}
-    emissions::Vector{StudentTEmission}
-    stationary::Vector{Float64}
-    jump::JumpParameters
-    ν::Float64
-    rf::Float64
-    dt::Float64
-end
-
-# --- Simulation Output -----------------------------------------------------
-"""
-    SimulationPath
-
-A single simulated path: states, observations, and jump indicators.
-"""
-struct SimulationPath
-    states::Vector{Int}
-    observations::Vector{Float64}
-    jumps::Vector{Bool}
-end
+# --- Validation report ------------------------------------------------------------------------------------------------- #
 
 """
-    SimulationResult
+    mutable struct MyValidationReportModel <: AbstractReportModel
 
-Collection of simulated paths.
-"""
-struct SimulationResult
-    paths::Vector{SimulationPath}
-end
+The `MyValidationReportModel` mutable struct holds the results of comparing simulated paths to the empirical growth rates.
+The vector fields hold one value for each simulated path.
 
-# --- Validation Types -------------------------------------------------------
+### Required fields
+- `ks_pvalue::Array{Float64,1}`: The Kolmogorov-Smirnov p-value of each path
+- `ad_pvalue::Array{Float64,1}`: The Anderson-Darling p-value of each path
+- `wasserstein::Array{Float64,1}`: The Wasserstein distance between each path and the empirical growth rates
+- `hellinger::Array{Float64,1}`: The Hellinger distance between each path and the empirical growth rates
+- `acf_mae::Array{Float64,1}`: The mean absolute error between the autocorrelation of each path and the empirical autocorrelation
+- `kurtosis_sim::Array{Float64,1}`: The excess kurtosis of each path
+- `kurtosis_emp::Float64`: The excess kurtosis of the empirical growth rates
+- `ks_pass_rate::Float64`: The fraction of paths with a Kolmogorov-Smirnov p-value above `α`
+- `ad_pass_rate::Float64`: The fraction of paths with an Anderson-Darling p-value above `α`
+- `mean_acf_mae::Float64`: The mean of `acf_mae` over the paths
+- `mean_wasserstein::Float64`: The mean of `wasserstein` over the paths
+- `mean_hellinger::Float64`: The mean of `hellinger` over the paths
+- `mean_kurtosis::Float64`: The mean of `kurtosis_sim` over the paths
+- `α::Float64`: The significance level of the tests
 """
-    PathTestResult
+mutable struct MyValidationReportModel <: AbstractReportModel
 
-Statistical test results for a single simulated path vs empirical data.
-"""
-struct PathTestResult
-    ks_pvalue::Float64
-    ad_pvalue::Float64
-    wasserstein::Float64
-    hellinger::Float64
-    acf_mae::Float64
-    kurtosis_sim::Float64
+    # data -
+    ks_pvalue::Array{Float64,1}
+    ad_pvalue::Array{Float64,1}
+    wasserstein::Array{Float64,1}
+    hellinger::Array{Float64,1}
+    acf_mae::Array{Float64,1}
+    kurtosis_sim::Array{Float64,1}
     kurtosis_emp::Float64
-end
-
-"""
-    ValidationReport <: AbstractValidationResult
-
-Aggregate validation report across Monte Carlo paths.
-"""
-struct ValidationReport <: AbstractValidationResult
-    path_results::Vector{PathTestResult}
     ks_pass_rate::Float64
     ad_pass_rate::Float64
     mean_acf_mae::Float64
@@ -138,186 +120,337 @@ struct ValidationReport <: AbstractValidationResult
     mean_hellinger::Float64
     mean_kurtosis::Float64
     α::Float64
+
+    # constructor -
+    MyValidationReportModel() = new();
 end
 
-# --- Dependence Models ------------------------------------------------------
-"""
-    GaussianCopula <: AbstractDependenceModel
+# --- Copula models ----------------------------------------------------------------------------------------------------- #
 
-Gaussian copula defined by a correlation matrix.
 """
-struct GaussianCopula <: AbstractDependenceModel
-    Σ::Matrix{Float64}
+    mutable struct MyGaussianCopulaModel <: AbstractDependenceModel
+
+The `MyGaussianCopulaModel` mutable struct holds a Gaussian copula for several assets.
+
+### Required fields
+- `Σ::Array{Float64,2}`: The correlation matrix of the copula
+"""
+mutable struct MyGaussianCopulaModel <: AbstractDependenceModel
+
+    # data -
+    Σ::Array{Float64,2}
+
+    # constructor -
+    MyGaussianCopulaModel() = new();
 end
 
 """
-    StudentTCopula <: AbstractDependenceModel
+    mutable struct MyStudentTCopulaModel <: AbstractDependenceModel
 
-Student-t copula with tail dependence.
+The `MyStudentTCopulaModel` mutable struct holds a Student-t copula for several assets.
+
+### Required fields
+- `Σ::Array{Float64,2}`: The correlation matrix of the copula
+- `ν::Float64`: The degrees of freedom of the copula
 """
-struct StudentTCopula <: AbstractDependenceModel
-    Σ::Matrix{Float64}
+mutable struct MyStudentTCopulaModel <: AbstractDependenceModel
+
+    # data -
+    Σ::Array{Float64,2}
     ν::Float64
+
+    # constructor -
+    MyStudentTCopulaModel() = new();
 end
 
-# --- Bivariate Copula Families (for Vine Copulas) --------------------------
-"""Supertype for bivariate copula families used in vine copula construction."""
-abstract type AbstractBivariateCopula end
+"""
+    mutable struct MyGaussianBivariateCopulaModel <: AbstractBivariateCopulaModel
 
-"""Gaussian bivariate copula with correlation parameter ρ ∈ (-1, 1)."""
-struct GaussianBiCopula <: AbstractBivariateCopula
+The `MyGaussianBivariateCopulaModel` mutable struct holds a Gaussian copula for two assets.
+
+### Required fields
+- `ρ::Float64`: The correlation of the copula
+"""
+mutable struct MyGaussianBivariateCopulaModel <: AbstractBivariateCopulaModel
+
+    # data -
     ρ::Float64
+
+    # constructor -
+    MyGaussianBivariateCopulaModel() = new();
 end
 
-"""Student-t bivariate copula with correlation ρ and degrees of freedom ν."""
-struct StudentTBiCopula <: AbstractBivariateCopula
+"""
+    mutable struct MyStudentTBivariateCopulaModel <: AbstractBivariateCopulaModel
+
+The `MyStudentTBivariateCopulaModel` mutable struct holds a Student-t copula for two assets.
+
+### Required fields
+- `ρ::Float64`: The correlation of the copula
+- `ν::Float64`: The degrees of freedom of the copula
+"""
+mutable struct MyStudentTBivariateCopulaModel <: AbstractBivariateCopulaModel
+
+    # data -
     ρ::Float64
     ν::Float64
+
+    # constructor -
+    MyStudentTBivariateCopulaModel() = new();
 end
 
-"""Clayton bivariate copula with parameter θ > 0. Lower tail dependence."""
-struct ClaytonBiCopula <: AbstractBivariateCopula
+"""
+    mutable struct MyClaytonBivariateCopulaModel <: AbstractBivariateCopulaModel
+
+The `MyClaytonBivariateCopulaModel` mutable struct holds a Clayton copula for two assets.
+
+### Required fields
+- `θ::Float64`: The dependence parameter of the copula
+"""
+mutable struct MyClaytonBivariateCopulaModel <: AbstractBivariateCopulaModel
+
+    # data -
     θ::Float64
+
+    # constructor -
+    MyClaytonBivariateCopulaModel() = new();
 end
 
-"""Gumbel bivariate copula with parameter θ ≥ 1. Upper tail dependence."""
-struct GumbelBiCopula <: AbstractBivariateCopula
+"""
+    mutable struct MyGumbelBivariateCopulaModel <: AbstractBivariateCopulaModel
+
+The `MyGumbelBivariateCopulaModel` mutable struct holds a Gumbel copula for two assets.
+
+### Required fields
+- `θ::Float64`: The dependence parameter of the copula
+"""
+mutable struct MyGumbelBivariateCopulaModel <: AbstractBivariateCopulaModel
+
+    # data -
     θ::Float64
+
+    # constructor -
+    MyGumbelBivariateCopulaModel() = new();
 end
 
-"""Frank bivariate copula with parameter θ ≠ 0. No tail dependence, symmetric."""
-struct FrankBiCopula <: AbstractBivariateCopula
+"""
+    mutable struct MyFrankBivariateCopulaModel <: AbstractBivariateCopulaModel
+
+The `MyFrankBivariateCopulaModel` mutable struct holds a Frank copula for two assets.
+
+### Required fields
+- `θ::Float64`: The dependence parameter of the copula
+"""
+mutable struct MyFrankBivariateCopulaModel <: AbstractBivariateCopulaModel
+
+    # data -
     θ::Float64
+
+    # constructor -
+    MyFrankBivariateCopulaModel() = new();
+end
+
+# --- Vine copula ------------------------------------------------------------------------------------------------------- #
+
+"""
+    mutable struct MyVineEdgeModel
+
+The `MyVineEdgeModel` mutable struct holds one edge of a vine copula. The edge links two assets, given the conditioned assets, through a bivariate copula.
+
+### Required fields
+- `first::Int64`: The index of the first asset of the edge
+- `second::Int64`: The index of the second asset of the edge
+- `conditioned::Array{Int64,1}`: The indices of the assets that the edge is conditioned on
+- `copula::AbstractBivariateCopulaModel`: The bivariate copula of the edge
+"""
+mutable struct MyVineEdgeModel
+
+    # data -
+    first::Int64
+    second::Int64
+    conditioned::Array{Int64,1}
+    copula::AbstractBivariateCopulaModel
+
+    # constructor -
+    MyVineEdgeModel() = new();
 end
 
 """
-    VineEdge
+    mutable struct MyVineCopulaModel <: AbstractDependenceModel
 
-One edge in a vine copula tree, representing a conditional bivariate copula.
+The `MyVineCopulaModel` mutable struct holds a vine copula for several assets.
+
+### Required fields
+- `number_of_assets::Int64`: The number of assets
+- `order::Array{Int64,1}`: The order of the assets in the vine
+- `edges::Array{Array{MyVineEdgeModel,1},1}`: The edges of the vine. Entry `k` holds the edges of tree `k`
 """
-struct VineEdge
-    var1::Int
-    var2::Int
-    conditioned::Vector{Int}
-    copula::AbstractBivariateCopula
+mutable struct MyVineCopulaModel <: AbstractDependenceModel
+
+    # data -
+    number_of_assets::Int64
+    order::Array{Int64,1}
+    edges::Array{Array{MyVineEdgeModel,1},1}
+
+    # constructor -
+    MyVineCopulaModel() = new();
 end
 
-"""
-    VineCopula <: AbstractDependenceModel
-
-C-vine copula: each pair of assets gets its own bivariate copula family,
-allowing heterogeneous dependence (e.g., heavy-tailed for tech pairs,
-asymmetric for energy-finance). Automatic family selection via AIC.
-"""
-struct VineCopula <: AbstractDependenceModel
-    d::Int
-    order::Vector{Int}
-    edges::Vector{Vector{VineEdge}}
-end
+# --- Dependence models ------------------------------------------------------------------------------------------------- #
 
 """
-    SingleIndexModel <: AbstractDependenceModel
+    mutable struct MySingleIndexDependenceModel <: AbstractDependenceModel
 
-Single-Index Model: all cross-asset correlation flows through one market factor.
-    G_i = αᵢ + βᵢ × G_market + εᵢ
+The `MySingleIndexDependenceModel` mutable struct holds a single-index model of the growth rates of several assets:
+`g_i = α_i + β_i g_m + ε_i`, where `g_m` is the growth rate of the market.
+
+### Required fields
+- `α::Array{Float64,1}`: The intercept of each asset
+- `β::Array{Float64,1}`: The sensitivity of each asset to the market
+- `σ_ε::Array{Float64,1}`: The standard deviation of the residuals of each asset
+- `residuals::Array{Float64,2}`: The residuals of the fit. Each column holds the residuals of one asset
+- `residual_method::Symbol`: The method used to draw the residuals when simulating
+- `market_model::MyJumpHiddenMarkovModel`: The hidden Markov model of the market
 """
-struct SingleIndexModel <: AbstractDependenceModel
-    α::Vector{Float64}
-    β::Vector{Float64}
-    σ_ε::Vector{Float64}
-    residuals::Matrix{Float64}
+mutable struct MySingleIndexDependenceModel <: AbstractDependenceModel
+
+    # data -
+    α::Array{Float64,1}
+    β::Array{Float64,1}
+    σ_ε::Array{Float64,1}
+    residuals::Array{Float64,2}
     residual_method::Symbol
-    market_model::JumpHiddenMarkovModel
+    market_model::MyJumpHiddenMarkovModel
+
+    # constructor -
+    MySingleIndexDependenceModel() = new();
 end
 
 """
-    HybridSingleIndexModel <: AbstractDependenceModel
+    mutable struct MyHybridSingleIndexDependenceModel <: AbstractDependenceModel
 
-Variance-corrected Single-Index Model with per-ticker HMM marginals and copula
-dependence. Combines:
-- SIM factor structure: `G_i = αᵢ + βᵢ × G_market + εᵢ`
-- Per-ticker HMM marginals for idiosyncratic draws (preserves tails, regimes)
-- Variance correction so `Var[G_i] ≈ Var[marginal_i]` (marginal-preserving branch)
-  or exact R² recovery (R²-preserving branch for high-R² ETFs)
-- β clipping with an idiosyncratic floor to prevent degenerate paths
-- Copula rank-reordering to preserve cross-sectional dependence
+The `MyHybridSingleIndexDependenceModel` mutable struct holds a single-index model that keeps the marginal model of each asset.
+A copula, fit to the residuals of the single-index fit, links the assets.
 
-See `sample_dependence` for the full construction recipe.
+### Required fields
+- `α::Array{Float64,1}`: The intercept of each asset
+- `β::Array{Float64,1}`: The sensitivity of each asset to the market
+- `r²::Array{Float64,1}`: The R² of the single-index fit of each asset
+- `σ_market::Float64`: The annualized standard deviation of the growth rates of the market
+- `marginals::Dict{String,MyJumpHiddenMarkovModel}`: The hidden Markov model of each asset, keyed by ticker
+- `copula::AbstractDependenceModel`: The copula fit to the residuals
+- `market_model::MyJumpHiddenMarkovModel`: The hidden Markov model of the market
+- `tickers::Array{String,1}`: The ordered tickers. The order matches `α`, `β`, and `r²`
+- `r2_preserve_threshold::Float64`: The R² above which the model preserves the R² of the asset
+- `idiosyncratic_floor::Float64`: The smallest share of the variance of an asset that is idiosyncratic
 """
-struct HybridSingleIndexModel <: AbstractDependenceModel
-    α::Vector{Float64}                              # per-ticker intercepts (Jensen's alpha)
-    β::Vector{Float64}                              # per-ticker calibrated betas
-    r²::Vector{Float64}                             # per-ticker R² from OLS calibration
-    σ_market::Float64                               # market growth-rate std (annualized)
-    marginals::Dict{String,JumpHiddenMarkovModel}   # per-ticker HMM marginals
-    copula::AbstractDependenceModel                 # fitted on OLS residuals
-    market_model::JumpHiddenMarkovModel             # fitted market HMM
-    tickers::Vector{String}                         # ordered ticker list (indexes α, β, r²)
-    r2_preserve_threshold::Float64                  # R² cutoff for R²-preserving branch
-    idiosyncratic_floor::Float64                    # minimum idiosyncratic variance share (f)
+mutable struct MyHybridSingleIndexDependenceModel <: AbstractDependenceModel
+
+    # data -
+    α::Array{Float64,1}
+    β::Array{Float64,1}
+    r²::Array{Float64,1}
+    σ_market::Float64
+    marginals::Dict{String,MyJumpHiddenMarkovModel}
+    copula::AbstractDependenceModel
+    market_model::MyJumpHiddenMarkovModel
+    tickers::Array{String,1}
+    r2_preserve_threshold::Float64
+    idiosyncratic_floor::Float64
+
+    # constructor -
+    MyHybridSingleIndexDependenceModel() = new();
 end
 
 """
-    SectorFactorModel <: AbstractDependenceModel
+    mutable struct MySectorFactorModel <: AbstractDependenceModel
 
-Multi-asset composition with one market model, one model per sector, and one own model per name:
-    g_i(t) = α_i + β_i(t)·g_m(t) + δ_i·f_s(t) + ψ_i·ε̃_i(t)
-The own model of name i is fit to its single-index residual after the sector term; ψ_i sizes its draw so
-the β drift, sector and own terms carry the name's single-index residual variance. Names are linked only through the shared market draw `g_m` and sector draw `f_s` on the same day
-(no copula). α and β come from the single-index fit; β is fixed unless `β_scale` is nonzero, in which
-case it drifts as an exponential moving average of normal shocks with half-life `β_halflife`.
-See `fit(SectorFactorModel, ...)` and `sample_dependence(::SectorFactorModel, n; seed)`.
+The `MySectorFactorModel` mutable struct holds a model with one market model, one model for each sector, and one own model for each asset:
+`g_i(t) = α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i ε_i(t)`.
+The own model of an asset is fit to the residual of the single-index fit after the sector term.
+The assets are linked only through the market draw and the sector draw on the same day.
+
+### Required fields
+- `tickers::Array{String,1}`: The assets, without the market, in fit order
+- `sector::Array{String,1}`: The sector label of each asset
+- `sectors::Array{String,1}`: The sorted unique sector labels
+- `sector_index::Array{Int64,1}`: The position of the sector of each asset in `sectors`
+- `α::Array{Float64,1}`: The intercept of each asset, in 1/year
+- `β::Array{Float64,1}`: The sensitivity of each asset to the market from the single-index fit
+- `δ::Array{Float64,1}`: The sector loading of each asset
+- `r²::Array{Float64,1}`: The R² of the single-index fit of each asset
+- `ψ::Array{Float64,1}`: The scale of the own draw of each asset
+- `σ²_own::Array{Float64,1}`: The residual variance left to the own term of each asset
+- `σ²_u::Array{Float64,1}`: The variance of the training series of each own model
+- `σ²_m::Float64`: The variance of the growth rate of the market over the fit window
+- `ε_center::Array{Float64,1}`: The long-run mean of each own model
+- `β_halflife::Float64`: The half-life of the drift of `β`, in trading days
+- `β_scale::Array{Float64,1}`: The drift scale of `β` for each asset. A value of `0.0` keeps `β` fixed
+- `market_model::MyJumpHiddenMarkovModel`: The hidden Markov model of the market
+- `sector_models::Array{MyJumpHiddenMarkovModel,1}`: The hidden Markov model of each sector, in the order of `sectors`
+- `own_models::Array{MyJumpHiddenMarkovModel,1}`: The own hidden Markov model of each asset, in the order of `tickers`
+- `sector_levels::Array{Float64,2}`: The compounded sector-factor series, used when tuning
+- `own_levels::Array{Float64,2}`: The compounded own-residual series, used when tuning
+- `center_steps::Int64`: The length of the draw that sets the noise center of each asset
+- `center_seed::Int64`: The seed offset of the centering draw. Asset `i` uses `center_seed + i`
 """
-struct SectorFactorModel <: AbstractDependenceModel
-    tickers::Vector{String}                       # names, market excluded, in fit order
-    sector::Vector{String}                        # one label per name
-    sectors::Vector{String}                       # sorted unique labels
-    sector_index::Vector{Int}                     # position of each name's sector in `sectors`
-    α::Vector{Float64}                            # intercepts used (after the optional pull), yr⁻¹
-    β::Vector{Float64}                            # single-index β̂
-    δ::Vector{Float64}                            # sector loadings
-    r²::Vector{Float64}                           # real R² of the single-index fit
-    ψ::Vector{Float64}                            # scale of each name's own draw, under the stored β drift
-    σ²_own::Vector{Float64}                       # var(e) − δ²·var(f): residual variance left to the own term, yr⁻²
-    σ²_u::Vector{Float64}                         # variance of each own model's training series, yr⁻²
-    σ²_m::Float64                                 # variance of the market's growth over the fit window, yr⁻²
-    ε_center::Vector{Float64}                     # long-run mean of each own model, yr⁻¹
-    β_halflife::Float64                           # trading days
-    β_scale::Vector{Float64}                      # per-name drift scale; zeros = fixed β
-    market_model::JumpHiddenMarkovModel
-    sector_models::Vector{JumpHiddenMarkovModel}  # one per `sectors`
-    own_models::Vector{JumpHiddenMarkovModel}     # one per `tickers`: the residual after the sector term
-    sector_levels::Matrix{Float64}                # compounded sector-factor series (price-like), for tune
-    own_levels::Matrix{Float64}                   # compounded own-residual series (price-like), for tune
-    center_steps::Int                             # length of the draw that sets each name's noise center
-    center_seed::Int                              # name i's centering draw uses seed center_seed + i
+mutable struct MySectorFactorModel <: AbstractDependenceModel
+
+    # data -
+    tickers::Array{String,1}
+    sector::Array{String,1}
+    sectors::Array{String,1}
+    sector_index::Array{Int64,1}
+    α::Array{Float64,1}
+    β::Array{Float64,1}
+    δ::Array{Float64,1}
+    r²::Array{Float64,1}
+    ψ::Array{Float64,1}
+    σ²_own::Array{Float64,1}
+    σ²_u::Array{Float64,1}
+    σ²_m::Float64
+    ε_center::Array{Float64,1}
+    β_halflife::Float64
+    β_scale::Array{Float64,1}
+    market_model::MyJumpHiddenMarkovModel
+    sector_models::Array{MyJumpHiddenMarkovModel,1}
+    own_models::Array{MyJumpHiddenMarkovModel,1}
+    sector_levels::Array{Float64,2}
+    own_levels::Array{Float64,2}
+    center_steps::Int64
+    center_seed::Int64
+
+    # constructor -
+    MySectorFactorModel() = new();
 end
 
-# --- Portfolio Types --------------------------------------------------------
-"""
-    PortfolioModel
+# --- Portfolio --------------------------------------------------------------------------------------------------------- #
 
-Multi-asset model: marginal Jump-HMMs coupled by a dependence model.
-
-The `tickers_map` field stores the original ticker → column index mapping from
-the price matrix used during `fit`. For `SingleIndexModel` portfolios this includes
-the market ticker (stored in `market_ticker`), even though it is excluded from
-`tickers` and `marginals`.
 """
-struct PortfolioModel
-    tickers::Vector{String}
-    marginals::Dict{String,JumpHiddenMarkovModel}
+    mutable struct MyPortfolioModel
+
+The `MyPortfolioModel` mutable struct holds a model of several assets: one hidden Markov model for each asset and a dependence model that links them.
+
+### Required fields
+- `tickers::Array{String,1}`: The tickers of the assets. A single-index portfolio leaves the market ticker out
+- `marginals::Dict{String,MyJumpHiddenMarkovModel}`: The hidden Markov model of each asset, keyed by ticker
+- `dependence::AbstractDependenceModel`: The model that links the assets
+- `tickers_map::Dict{String,Int64}`: The column of each ticker in the price matrix used to fit the model
+- `market_ticker::String`: The ticker of the market
+- `rf::Float64`: The risk-free rate, in 1/year
+- `Δt::Float64`: The time step of the growth rates, in years
+"""
+mutable struct MyPortfolioModel
+
+    # data -
+    tickers::Array{String,1}
+    marginals::Dict{String,MyJumpHiddenMarkovModel}
     dependence::AbstractDependenceModel
-    tickers_map::Dict{String,Int}
+    tickers_map::Dict{String,Int64}
     market_ticker::String
-end
+    rf::Float64
+    Δt::Float64
 
-"""
-    PortfolioSimulationResult
-
-Correlated synthetic paths across multiple assets.
-"""
-struct PortfolioSimulationResult
-    tickers::Vector{String}
-    results::Dict{String,SimulationResult}
+    # constructor -
+    MyPortfolioModel() = new();
 end

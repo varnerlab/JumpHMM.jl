@@ -1,7 +1,7 @@
 name = "JumpHMM"
 uuid = "6ee30eab-673b-484c-8b30-2cdb31ee1eb8"
 authors = ["Jeffrey Varner", "Abdulrahman Alswaidan"]
-version = "0.4.1"
+version = "0.5.0"
 
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
@@ -15,6 +15,7 @@ SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
+JLD2 = "0.4, 0.5"
 julia = "1.9"
 DataFrames = "1"
 Distributions = "0.25"
@@ -23,10 +24,11 @@ SpecialFunctions = "2"
 StatsBase = "0.34"
 
 [extras]
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 
 [targets]
-test = ["Test", "Random", "Statistics", "Distributions"]
+test = ["Test", "Random", "Statistics", "Distributions", "JLD2"]
