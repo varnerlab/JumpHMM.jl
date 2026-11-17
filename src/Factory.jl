@@ -609,3 +609,320 @@ function build(model::Type{MyVineCopulaModel}, data::NamedTuple)::MyVineCopulaMo
     # return -
     return m;
 end
+
+"""
+    build(model::Type{MySingleIndexDependenceModel}, data::NamedTuple) -> MySingleIndexDependenceModel
+
+Fit a single-index model to the growth rates of several assets. For each asset, we regress its growth rates on the growth rates of the market,
+`g_i = α_i + β_i g_m + ε_i`, using ordinary least squares. We keep the residuals of each asset, and we build a hidden Markov model of the market.
+
+### Arguments
+- `model::Type{MySingleIndexDependenceModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `growth_rates::Array{Float64,2}`: The growth rates of the assets, one row per day and one column per asset
+    - `market_growth_rates::Array{Float64,1}`: The growth rates of the market. The length must equal the number of rows of `growth_rates`, and the values must not all be equal
+    - `number_of_states::Int64`: The number of states of the hidden Markov model of the market
+    - `ν::Float64`: The degrees of freedom of the Student-t emission distributions of the market model
+
+### Returns
+- `MySingleIndexDependenceModel`: The fitted model
+
+### Optional Arguments
+The optional keys of `data` and their defaults are:
+- `market_prices::Union{Array{Float64,1},Nothing}`: The prices of the market. If `nothing`, we rebuild prices from `market_growth_rates`, starting at `100.0`, and fit the market model to those. The default is `nothing`
+- `rf::Float64`: The risk-free rate, per year. The default is `0.0`
+- `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
+- `min_obs::Int64`: The fewest growth rates a state of the market model needs to use its own emission estimates. The default is `2`
+- `residual_method::Symbol`: How `sample_dependence` draws the residuals, either `:bootstrap` or `:gaussian`. The default is `:bootstrap`
+
+### Example
+```julia
+model = JumpHMM.build(JumpHMM.MySingleIndexDependenceModel, (
+    growth_rates = G[:, 2:end],
+    market_growth_rates = G[:, 1],
+    number_of_states = 20,
+    ν = 5.0
+));
+```
+"""
+function build(model::Type{MySingleIndexDependenceModel}, data::NamedTuple)::MySingleIndexDependenceModel
+
+    # check: the required keys are present -
+    if haskey(data, :growth_rates) == false
+        throw(ArgumentError("growth_rates is required"));
+    end
+    if haskey(data, :market_growth_rates) == false
+        throw(ArgumentError("market_growth_rates is required"));
+    end
+    if haskey(data, :number_of_states) == false
+        throw(ArgumentError("number_of_states is required"));
+    end
+    if haskey(data, :ν) == false
+        throw(ArgumentError("ν is required"));
+    end
+    growth_rates = data.growth_rates;
+    market_growth_rates = data.market_growth_rates;
+    number_of_states = data.number_of_states;
+    ν = data.ν;
+
+    # set the optional keys to their defaults, then replace the ones that were given -
+    market_prices = nothing;
+    rf = 0.0;
+    Δt = 1/252;
+    min_obs = 2;
+    residual_method = :bootstrap;
+    if haskey(data, :market_prices) == true
+        market_prices = data.market_prices;
+    end
+    if haskey(data, :rf) == true
+        rf = data.rf;
+    end
+    if haskey(data, :Δt) == true
+        Δt = data.Δt;
+    end
+    if haskey(data, :min_obs) == true
+        min_obs = data.min_obs;
+    end
+    if haskey(data, :residual_method) == true
+        residual_method = data.residual_method;
+    end
+
+    # check: the residual method is known, and the market matches the assets -
+    if residual_method != :bootstrap && residual_method != :gaussian
+        throw(ArgumentError("residual_method must be :bootstrap or :gaussian, got :$(residual_method)"));
+    end
+    (number_of_days, number_of_assets) = size(growth_rates);
+    if length(market_growth_rates) != number_of_days
+        throw(ArgumentError("market_growth_rates must have one value for each row of growth_rates"));
+    end
+
+    # fit the hidden Markov model of the market -
+    if isnothing(market_prices) == true
+        # no prices were given, so we rebuild prices from the market growth rates, starting at 100.0, and take their growth rates.
+        # This round trip is redundant, but it keeps the numbers equal to the earlier version -
+        market_prices = prices_from_growth_rates(market_growth_rates, 100.0; rf = rf, Δt = Δt);
+    end
+    market_model = build(MyJumpHiddenMarkovModel, (
+        growth_rates = excess_growth_rates(market_prices; rf = rf, Δt = Δt),
+        number_of_states = number_of_states,
+        ν = ν,
+        Δt = Δt,
+        min_obs = min_obs
+    ));
+
+    # check: the market is not constant -
+    market_mean = mean(market_growth_rates);
+    market_variance = var(market_growth_rates);
+    if market_variance ≈ 0.0
+        throw(ArgumentError("the market growth rates have zero variance (a constant market)"));
+    end
+
+    # regress each asset on the market, and keep the residuals -
+    α = Array{Float64,1}(undef, number_of_assets);
+    β = Array{Float64,1}(undef, number_of_assets);
+    σ_ε = Array{Float64,1}(undef, number_of_assets);
+    residuals = Array{Float64,2}(undef, number_of_days, number_of_assets);
+    for i ∈ 1:number_of_assets
+        asset_growth_rates = growth_rates[:, i];
+        β[i] = cov(asset_growth_rates, market_growth_rates) / market_variance;
+        α[i] = mean(asset_growth_rates) - β[i] * market_mean;
+        residuals[:, i] = asset_growth_rates .- α[i] .- β[i] .* market_growth_rates;
+        σ_ε[i] = std(residuals[:, i]);
+    end
+
+    # build an empty model, then fill in the fields -
+    m = MySingleIndexDependenceModel();
+    m.α = α;
+    m.β = β;
+    m.σ_ε = σ_ε;
+    m.residuals = residuals;
+    m.residual_method = residual_method;
+    m.market_model = market_model;
+
+    # return -
+    return m;
+end
+
+"""
+    build(model::Type{MyHybridSingleIndexDependenceModel}, data::NamedTuple) -> MyHybridSingleIndexDependenceModel
+
+Fit a hybrid single-index model from a matrix of prices. We build a hidden Markov model of the market and one of each other asset,
+regress the growth rates of each asset on the growth rates of the market to get `α`, `β`, and `r²`, and fit a copula to the residuals.
+
+### Arguments
+- `model::Type{MyHybridSingleIndexDependenceModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `tickers::Array{String,1}`: The label of each column of `prices`. The list must include `market`
+    - `prices::Array{Float64,2}`: The prices, one row per day and one column per ticker
+    - `market::String`: The ticker of the market
+    - `number_of_states::Int64`: The number of states of each hidden Markov model
+    - `ν::Float64`: The degrees of freedom of the Student-t emission distributions
+
+### Returns
+- `MyHybridSingleIndexDependenceModel`: The fitted model. The tickers of the model are the tickers without the market, in their original order
+
+### Optional Arguments
+The optional keys of `data` and their defaults are:
+- `copula::Type`: The type of the copula fit to the residuals. The default is `MyStudentTCopulaModel`
+- `rf::Float64`: The risk-free rate, per year. The default is `0.0`
+- `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
+- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. The default is `2`
+- `r2_preserve_threshold::Float64`: The R² at or above which the model keeps the R² of the asset. The default is `0.80`
+- `idiosyncratic_floor::Float64`: The smallest share of the variance of an asset that is idiosyncratic. The default is `0.10`
+
+### Example
+```julia
+model = JumpHMM.build(JumpHMM.MyHybridSingleIndexDependenceModel, (
+    tickers = tickers,
+    prices = P,
+    market = "SPY",
+    number_of_states = 20,
+    ν = 5.0
+));
+```
+"""
+function build(model::Type{MyHybridSingleIndexDependenceModel}, data::NamedTuple)::MyHybridSingleIndexDependenceModel
+
+    # check: the required keys are present -
+    if haskey(data, :tickers) == false
+        throw(ArgumentError("tickers is required"));
+    end
+    if haskey(data, :prices) == false
+        throw(ArgumentError("prices is required"));
+    end
+    if haskey(data, :market) == false
+        throw(ArgumentError("market is required"));
+    end
+    if haskey(data, :number_of_states) == false
+        throw(ArgumentError("number_of_states is required"));
+    end
+    if haskey(data, :ν) == false
+        throw(ArgumentError("ν is required"));
+    end
+    tickers = data.tickers;
+    prices = data.prices;
+    market = data.market;
+    number_of_states = data.number_of_states;
+    ν = data.ν;
+
+    # set the optional keys to their defaults, then replace the ones that were given -
+    copula_type = MyStudentTCopulaModel;
+    rf = 0.0;
+    Δt = 1/252;
+    min_obs = 2;
+    r2_preserve_threshold = 0.80;
+    idiosyncratic_floor = 0.10;
+    if haskey(data, :copula) == true
+        copula_type = data.copula;
+    end
+    if haskey(data, :rf) == true
+        rf = data.rf;
+    end
+    if haskey(data, :Δt) == true
+        Δt = data.Δt;
+    end
+    if haskey(data, :min_obs) == true
+        min_obs = data.min_obs;
+    end
+    if haskey(data, :r2_preserve_threshold) == true
+        r2_preserve_threshold = data.r2_preserve_threshold;
+    end
+    if haskey(data, :idiosyncratic_floor) == true
+        idiosyncratic_floor = data.idiosyncratic_floor;
+    end
+
+    # check: the tickers match the columns, and the market is one of them -
+    number_of_columns = size(prices, 2);
+    if length(tickers) != number_of_columns
+        throw(ArgumentError("tickers must have one label for each column of prices"));
+    end
+    market_index = findfirst(==(market), tickers);
+    if isnothing(market_index) == true
+        throw(ArgumentError("the market ticker $(market) is not in tickers"));
+    end
+
+    # compute the growth rates of every column, and of the market -
+    growth_rates = excess_growth_rates(prices; rf = rf, Δt = Δt);
+    market_growth_rates = growth_rates[:, market_index];
+    σ_market = std(market_growth_rates);
+    if σ_market ≈ 0.0
+        throw(ArgumentError("the market growth rates have zero variance (a constant market)"));
+    end
+
+    # build the hidden Markov model of the market -
+    market_model = build(MyJumpHiddenMarkovModel, (
+        growth_rates = excess_growth_rates(prices[:, market_index]; rf = rf, Δt = Δt),
+        number_of_states = number_of_states,
+        ν = ν,
+        Δt = Δt,
+        min_obs = min_obs
+    ));
+
+    # the assets are every column except the market -
+    asset_columns = Array{Int64,1}();
+    for j ∈ 1:number_of_columns
+        if j != market_index
+            push!(asset_columns, j);
+        end
+    end
+    asset_tickers = tickers[asset_columns];
+    number_of_assets = length(asset_tickers);
+
+    # initialize -
+    marginals = Dict{String,MyJumpHiddenMarkovModel}();
+    α = Array{Float64,1}(undef, number_of_assets);
+    β = Array{Float64,1}(undef, number_of_assets);
+    r² = Array{Float64,1}(undef, number_of_assets);
+    residuals = Array{Float64,2}(undef, size(growth_rates, 1), number_of_assets);
+    market_mean = mean(market_growth_rates);
+    market_variance = var(market_growth_rates);
+
+    # main loop: for each asset, build its hidden Markov model and regress it on the market -
+    for k ∈ 1:number_of_assets
+        j = asset_columns[k];
+
+        # the hidden Markov model of the asset -
+        marginals[asset_tickers[k]] = build(MyJumpHiddenMarkovModel, (
+            growth_rates = excess_growth_rates(prices[:, j]; rf = rf, Δt = Δt),
+            number_of_states = number_of_states,
+            ν = ν,
+            Δt = Δt,
+            min_obs = min_obs
+        ));
+
+        # the regression of the asset on the market -
+        asset_growth_rates = growth_rates[:, j];
+        asset_mean = mean(asset_growth_rates);
+        β[k] = cov(asset_growth_rates, market_growth_rates) / market_variance;
+        α[k] = asset_mean - β[k] * market_mean;
+        residual = asset_growth_rates .- α[k] .- β[k] .* market_growth_rates;
+        residuals[:, k] = residual;
+
+        # the R² of the regression: 0.0 if the asset growth rates are constant -
+        SS_residual = dot(residual, residual);
+        SS_total = dot(asset_growth_rates .- asset_mean, asset_growth_rates .- asset_mean);
+        r²[k] = 0.0;
+        if SS_total > 0.0
+            r²[k] = 1.0 - SS_residual / SS_total;
+        end
+    end
+
+    # fit the copula to the residuals -
+    copula = build(copula_type, (growth_rates = residuals,));
+
+    # build an empty model, then fill in the fields -
+    m = MyHybridSingleIndexDependenceModel();
+    m.α = α;
+    m.β = β;
+    m.r² = r²;
+    m.σ_market = σ_market;
+    m.marginals = marginals;
+    m.copula = copula;
+    m.market_model = market_model;
+    m.tickers = asset_tickers;
+    m.r2_preserve_threshold = r2_preserve_threshold;
+    m.idiosyncratic_floor = idiosyncratic_floor;
+
+    # return -
+    return m;
+end

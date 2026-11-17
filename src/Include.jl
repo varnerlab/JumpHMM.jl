@@ -20,3 +20,4 @@ include(joinpath(@__DIR__, "Validate.jl"));
 include(joinpath(@__DIR__, "Decode.jl"));
 include(joinpath(@__DIR__, "Copula.jl"));
 include(joinpath(@__DIR__, "Vine.jl"));
+include(joinpath(@__DIR__, "SingleIndex.jl"));
