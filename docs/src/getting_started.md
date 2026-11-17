@@ -39,7 +39,7 @@ length(g)
 ```
 
 ## Build the model
-The [`build`](@ref build(::Type{MyJumpHiddenMarkovModel}, ::NamedTuple)) function estimates the hidden Markov model from the growth rates. The new model has no jump episodes, because the probability `ϵ` that an episode starts on a day is `0.0` by default.
+The [`build`](@ref build(::Type{MyJumpHiddenMarkovModel}, ::NamedTuple)) function estimates the hidden Markov model from the growth rates. The new model has no jump episodes, because the probability `ϵ` that a jump episode starts on a given day is `0.0` by default.
 
 ```@example workflow
 model = JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (
@@ -57,7 +57,7 @@ The [`tune`](@ref tune(::MyJumpHiddenMarkovModel, ::Array{Float64,1})) function 
 
 ```@example workflow
 tuned_model = JumpHMM.tune(model, g;
-    ϵ_range = range(1e-3, 5e-3, length = 3),  # the candidate probabilities that an episode starts on a day
+    ϵ_range = range(1e-3, 5e-3, length = 3),  # the candidate probabilities that a jump episode starts on a given day
     λ_range = range(10.0, 50.0, length = 3),  # the candidate values of the mean of the Poisson episode length (trading days)
     number_of_paths = 20,                     # the number of simulated paths for each pair
     seed = 5660                               # the seed of the random number generator
@@ -96,7 +96,7 @@ study_model = JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (
     growth_rates = g,
     number_of_states = 20,
     ν = 5.0,
-    ϵ = 5e-3,       # the probability that a jump episode starts on a day
+    ϵ = 5e-3,       # the probability that a jump episode starts on a given day
     λ = 30.0,       # the mean of the Poisson episode length (trading days)
     N_tail = 3      # the number of states in each tail that an episode day can reach
 ));

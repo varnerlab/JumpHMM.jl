@@ -23,7 +23,7 @@ The model reproduces three stylized facts of the daily growth rates of stocks:
 The hidden Markov model gives the heavy tails and the small linear autocorrelation. Synthetic growth-rate paths simulated without jump episodes show less volatility clustering than the market data. The jump episodes add the missing volatility clustering.
 
 ## Installation
-The package can be installed by running the following command in the Julia REPL:
+Install the package by running the following command in the Julia REPL:
 
 ```julia
 using Pkg

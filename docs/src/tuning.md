@@ -27,8 +27,8 @@ tuned_model = JumpHMM.tune(model, g;
     number_of_paths = 200,   # the number of simulated paths for each pair (default 200)
     number_of_steps = 0,     # the number of days in each path, or 0 for the number of growth rates (default 0)
     w_κ = 0.20,              # the weight of the kurtosis error in the score (default 0.20)
-    p_neg = 0.52,            # the probability that an episode day is in the negative tail (default 0.52)
-    N_tail = 5,              # the number of states in each tail that an episode day can reach (default 5)
+    p_neg = 0.52,            # the probability that an episode day is in the negative tail (default model.p_neg)
+    N_tail = 5,              # the number of states in each tail that an episode day can reach (default model.N_tail)
     acf_lags = 25,           # the number of lags L of the autocorrelation (default 25)
     seed = 5660              # the seed of the random number generator (default nothing)
 );
@@ -38,7 +38,7 @@ The tuned model is a copy of the input model with the best `ϵ` and `λ`. The in
 
 With a `seed`, the same grid gives the same result. When the data or the paths have too few days, we lower `acf_lags` to one less than the number of days in the shorter of the two.
 
-The tuned model takes `p_neg` and `N_tail` from the keywords of `tune`, which default to `0.52` and `5`. When the model was built with other values of `p_neg` and `N_tail`, pass the same values to `tune`.
+The tuned model takes `p_neg` and `N_tail` from the keywords of `tune`, which default to the values of the input model. A portfolio `tune` defaults both keywords to `nothing`, which keeps the values of each model.
 
 ## Grid size
 The default grid has ``20 \times 16 = 320`` pairs. With the default `200` paths for each pair, `tune` simulates 64,000 paths, each as long as the data. Start with a small grid, as in the [Getting Started](getting_started.md) example.

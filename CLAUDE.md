@@ -46,9 +46,15 @@ The module file `src/JumpHMM.jl` includes `src/Include.jl`, and it holds every e
 
 ## Same numbers as 0.4.1
 
-Every result of the package is identical (`==`) to the result of version 0.4.1. A change keeps the arithmetic, the operation order, and the order of the random draws.
+Every result of the package is identical (`==`) to the result of version 0.4.1, except the Hellinger distance. The function `hellinger_distance` counts the largest value of the two samples, which the 0.4.1 histogram left out. The `hellinger` and `mean_hellinger` fields of a validation report therefore differ from 0.4.1.
+
+A change keeps the arithmetic, the operation order, and the order of the random draws.
 
 The files `test/reference/reference-0.4.1.jld2` and `test/reference/reference-0.4.1-checkbounds.jld2` hold the 0.4.1 results. Bounds checking changes the last bit of some sums, so the test loader picks the checkbounds file when the tests run with bounds checking forced on (`Pkg.test()`), and the other file when they run with `--check-bounds=auto`. Run the tests in both modes before a commit. The file `test/reference/README.md` explains how to regenerate the reference files.
+
+The reference keys that end in `hellinger_corrected` or `mean_hellinger_corrected` hold the Hellinger distances of the 0.4.1 validation runs with the corrected histogram. The equivalence tests compare the Hellinger fields with these keys, and every other field with the 0.4.1 keys.
+
+The equivalence tests run only when the Julia version and the loaded Distributions, StatsBase, and SpecialFunctions versions equal the versions in `test/reference/Manifest.toml`. With any other version, `test/runtests.jl` prints one line that names each version that differs, skips the equivalence tests, and runs the unit tests.
 
 ## Tests
 
@@ -60,4 +66,4 @@ The pages are in `docs/src` and follow the writing rules above: plain sentences,
 
 ## Dependencies
 
-`Distributions`, `Statistics`, `StatsBase`, `LinearAlgebra`, `HypothesisTests`, `DataFrames`, `SpecialFunctions`, `PDMats`, and `Random`.
+The package depends on `Distributions`, `Statistics`, `StatsBase`, `LinearAlgebra`, `HypothesisTests`, `DataFrames`, `SpecialFunctions`, `PDMats`, and `Random`.

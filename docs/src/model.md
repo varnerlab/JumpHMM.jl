@@ -41,7 +41,7 @@ model = JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (
     growth_rates = g,         # the growth rates (1/year), at least two values, all finite
     number_of_states = 100,   # the number of states, an Int64 of at least 1
     ν = 5.0,                  # the degrees of freedom of the Student-t emissions
-    ϵ = 0.0,                  # the probability that a jump episode starts on a day (default 0.0)
+    ϵ = 0.0,                  # the probability that a jump episode starts on a given day (default 0.0)
     λ = 1.0,                  # the mean of the Poisson episode length, in trading days (default 1.0)
     p_neg = 0.52,             # the probability that an episode day is in the negative tail (default 0.52)
     N_tail = 5,               # the number of states in each tail that an episode day can reach (default 5)
@@ -50,7 +50,11 @@ model = JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (
 ));
 ```
 
-The build checks `growth_rates`, `number_of_states`, `ϵ`, `λ`, `p_neg`, and `N_tail`, and throws an `ArgumentError` that names the key, for example for `ϵ = 1.5` or `N_tail = 0`. Each step above is an exported function that you can also call on its own.
+The build checks every key before it fits anything. The build throws an `ArgumentError` that names the key for an unknown key, a value of the wrong type, or a value out of range, for example `ν = 5` (an integer) or `ϵ = 1.5`.
+
+The probability that a jump episode starts on a given day has the key `ϵ`, typed `\epsilon`. The similar Greek letter `ε` is an unknown key.
+
+Each step above is an exported function that you can also call on its own.
 
 The model holds no risk-free rate. We pass excess growth rates to `build`, `tune`, and `validate`. The risk-free rate is subtracted once, when [`excess_growth_rates`](@ref excess_growth_rates(::Array{Float64,1})) computes them.
 
@@ -70,3 +74,14 @@ The fields of a [`MyJumpHiddenMarkovModel`](@ref) are:
 | `ν` | The degrees of freedom of the Student-t emissions |
 | `ϵ`, `λ`, `p_neg`, `N_tail` | The jump settings, explained on the [Jump Episodes](jump_episodes.md) page |
 | `Δt` | The time step of the growth rates, in years |
+
+## Changing a fitted model
+The fields of a fitted model can be set by hand. Set the jump settings `ϵ`, `λ`, `p_neg`, and `N_tail` on a copy, so that the fitted model stays as it is:
+
+```julia
+model_with_jumps = deepcopy(model);
+model_with_jumps.ϵ = 2e-3;      # the probability that a jump episode starts on a given day
+model_with_jumps.λ = 40.0;      # the mean of the Poisson episode length, in trading days
+```
+
+A sector factor model needs more care, because the build computes `ε_center` and `ψ` from its fitted models. The [Sector Factor Model](sector_factor.md#Changing-a-fitted-model) page explains the steps.

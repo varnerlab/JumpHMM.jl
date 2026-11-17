@@ -1,14 +1,14 @@
+# JumpHMM.jl
+
 [![CI](https://github.com/varnerlab/JumpHMM.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/varnerlab/JumpHMM.jl/actions/workflows/CI.yml)
 [![Documentation](https://github.com/varnerlab/JumpHMM.jl/actions/workflows/documentation.yml/badge.svg)](https://varnerlab.github.io/JumpHMM.jl/dev/)
-
-# JumpHMM.jl
 
 The JumpHMM.jl package builds a hidden Markov model with jump episodes from the daily growth rates of a stock, and it simulates synthetic growth rates from that model. It also builds models of many assets, with a dependence model that links the assets. The method is described in:
 
 > Alswaidan A. and Varner J. *Hybrid Hidden Markov Model for Modeling Equity Excess Growth Rate Dynamics: A Discrete-State Approach with Jump-Diffusion*. Cornell University.
 
 ## Installation
-The package can be installed by running the following command in the Julia REPL:
+Install the package by running the following command in the Julia REPL:
 
 ```julia
 using Pkg
@@ -46,7 +46,7 @@ model = JumpHMM.build(JumpHMM.MyJumpHiddenMarkovModel, (
 ));
 
 tuned_model = JumpHMM.tune(model, g;
-    ϵ_range = range(1e-3, 5e-3, length = 3),  # the candidate probabilities that an episode starts on a day
+    ϵ_range = range(1e-3, 5e-3, length = 3),  # the candidate probabilities that a jump episode starts on a given day
     λ_range = range(10.0, 50.0, length = 3),  # the candidate values of the mean of the Poisson episode length (trading days)
     number_of_paths = 20,                     # the number of simulated paths for each pair
     seed = 5660                               # the seed of the random number generator

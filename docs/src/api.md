@@ -19,6 +19,8 @@ AbstractMarkovModel
 AbstractDependenceModel
 AbstractBivariateCopulaModel
 AbstractReportModel
+AbstractVineEdgeModel
+AbstractPortfolioModel
 ```
 
 ## Single-asset model

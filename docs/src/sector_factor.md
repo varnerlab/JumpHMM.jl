@@ -127,5 +127,23 @@ end
 
 The [`compose_name`](@ref compose_name(::MySectorFactorModel, ::NamedTuple, ::Int64)) function composes one asset alone, with its own intercept, half-life, or drift scale for that call. Because `compose` reads only the keys it needs, the `draws` can mix the parts of two draws, for example the market from one draw and the sectors from another.
 
+## Changing a fitted model
+The build computes the long-run mean ``\bar{\varepsilon}_i`` (`ε_center`) and the own scale ``\psi_i`` (`ψ`) from the fitted models. Change the intercepts and the drift of ``\beta`` with [`with_parameters`](@ref), which recomputes ``\psi``.
+
+The functions `compose` and `compose_name` compute the own scale again from the variances. A value written into `ψ` by hand therefore has no effect.
+
+After you change the jump settings or the emissions of the market model, a sector model, or an own model, call the build again with the keys `market_model`, `sector_models`, and `own_models`. The new build computes `ε_center` and `ψ` from the changed models:
+
+```julia
+own_models = deepcopy(model.own_models);
+own_models[1].ϵ = 2e-3;          # the probability that a jump episode starts on a given day, for the first asset
+rebuilt = JumpHMM.build(JumpHMM.MySectorFactorModel, (
+    tickers = tickers, prices = prices, market = "SPY", sector = sector, number_of_states = 100, ν = 5.0,
+    market_model = model.market_model, sector_models = model.sector_models, own_models = own_models
+));
+```
+
+The model from `with_parameters` shares its fitted models with the input model. A change to one of those fitted models changes both sector factor models. Make a `deepcopy` of the model before a study that edits its fitted models.
+
 ## Tuning, simulating, and validating
 To tune the market, sector, and own models, build a [portfolio](portfolio.md) with `dependence = JumpHMM.MySectorFactorModel`. The portfolio also simulates the universe, and it validates each own model against the residual series it was fit to. The portfolio takes the same `sector` key, and it takes the other keys of this build in `sector_options`.

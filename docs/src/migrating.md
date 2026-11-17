@@ -4,7 +4,7 @@
 CurrentModule = JumpHMM
 ```
 
-Version 0.5.0 renames the types, functions, and settings of version 0.4.1, and every model is now made with one `build` function. The old names are gone, with no aliases. With the same inputs and seeds, version 0.5.0 gives the same numbers as version 0.4.1.
+Version 0.5.0 renames the types, functions, and settings of version 0.4.1, and every model is now made with one `build` function. The old names are gone, with no aliases. With the same inputs and seeds, version 0.5.0 gives the same numbers as version 0.4.1, except for the Hellinger distance.
 
 ## General rules
 Most changes follow a few rules:
@@ -90,6 +90,7 @@ The tables below write the names without the `JumpHMM.` prefix to save space. Wr
 | `log_likelihood(model, observations)` | `log_likelihood(model, growth_rates)` |
 | `JumpHMM._wasserstein1(x, y)` | `wasserstein_distance(x, y)` |
 | `JumpHMM._hellinger(x, y)` | `hellinger_distance(x, y)` |
+| `JumpHMM._hellinger(x, y)` left the largest value of the two samples out of its histogram | `hellinger_distance(x, y)` counts the largest value in the last bin. The Hellinger distances differ from 0.4.1, including the `hellinger` and `mean_hellinger` fields of a validation report. No other number differs |
 | `excess_growth_rates(prices; rf, dt)`, all three methods | `excess_growth_rates(prices; rf, Δt)` |
 | `prices_from_growth_rates(G, P0; rf, dt)` | `prices_from_growth_rates(growth_rates, P₀; rf, Δt)` |
 | `fit(GaussianCopula, returns)` | `build(MyGaussianCopulaModel, (growth_rates = R,))` |

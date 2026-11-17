@@ -42,7 +42,7 @@ The [`hellinger_distance`](@ref) function puts both samples into the same histog
 H = \sqrt{\frac{1}{2} \sum_{b} \left(\sqrt{p_b} - \sqrt{q_b}\right)^{2}}
 ```
 
-The bins split the range of both samples into equal widths, with the larger of `30` and the square root of the larger sample size as the number of bins. The distance is `0.0` for the same histogram and `1.0` for histograms with no bin in common.
+The bins split the range of both samples into equal widths, with the larger of `30` and the square root of the larger sample size as the number of bins. Every value is counted, and the largest value goes in the last bin. The distance is `0.0` for the same histogram and `1.0` for histograms with no bin in common.
 
 ## Drift of β
 The package does not export the three functions below, which compute the drift of ``\beta`` in a [sector factor model](sector_factor.md):

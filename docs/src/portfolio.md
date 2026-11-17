@@ -44,10 +44,10 @@ The single-index model also takes `residual_method`, which the [Single-Index Mod
 The [`tune`](@ref tune(::MyPortfolioModel, ::Array{Float64,2})) function tunes each hidden Markov model of the portfolio with the single-asset [`tune`](@ref tune(::MyJumpHiddenMarkovModel, ::Array{Float64,1})), and returns a new portfolio. The input portfolio is not changed. What we tune depends on the dependence model:
 
 - __Copula:__ We tune the model of each asset on the growth rates of that asset.
-- __Single-index and hybrid:__ We tune the model of each asset and the market model.
+- __Single-index and hybrid:__ We tune the model of each asset and the market model. A hybrid portfolio then tunes the models of the assets that the hybrid model holds, in a second pass.
 - __Sector factor:__ We tune the market model, each sector model, and each own model. Then we draw the long-run mean of each own model (`ε_center`) again. The own scales `ψ` stay as they are.
 
-The keywords are those of the single-asset `tune`. With a `seed`, we reseed the global random number generator before each model is tuned.
+The keywords are those of the single-asset `tune`, except that `p_neg` and `N_tail` default to `nothing`, which keeps the values of each model. With a `seed`, we reseed the global random number generator before each model is tuned.
 
 Each model searches the whole grid, and a portfolio has many models. Start with a small grid.
 
