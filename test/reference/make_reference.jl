@@ -9,6 +9,7 @@
 using JumpHMM
 using JLD2
 using Random
+using Statistics
 using TOML
 
 const DEFAULT_INPUTS = joinpath(@__DIR__, "inputs.jld2")
@@ -341,6 +342,40 @@ function add_single_index!(ref::Dict{String,Any}, P::Matrix{Float64}, GA::Matrix
     ref["hybrid/σ_market"] = h.σ_market
     Random.seed!(13)
     ref["hybrid/sample"] = sample_dependence(h, 200)
+
+    # a second hybrid fit whose settings send tickers through the R2-preserving branch and the beta clip
+    hb = fit(HybridSingleIndexModel, tickers, P, "SPY"; N=20,
+             r2_preserve_threshold=0.45, idiosyncratic_floor=0.7)
+    ref["hybrid_branches/α"] = copy(hb.α)
+    ref["hybrid_branches/β"] = copy(hb.β)
+    ref["hybrid_branches/r²"] = copy(hb.r²)
+    ref["hybrid_branches/σ_market"] = hb.σ_market
+    Random.seed!(14)
+    ref["hybrid_branches/sample"] = sample_dependence(hb, 200)
+    report_hybrid_branches(hb)
+end
+
+"""
+    report_hybrid_branches(h)
+
+Print which branch of the hybrid sample each ticker takes: preserve (r² at or above the threshold), clip (beta lowered because
+rho = beta^2 * sigma_market^2 / var(marginal) is above 1 - floor), or plain. The marginal variance is approximated by a long simulation.
+"""
+function report_hybrid_branches(h)
+    saved = copy(Random.default_rng())
+    Random.seed!(99)
+    for k in 1:length(h.tickers)
+        obs = simulate(h.marginals[h.tickers[k]], 20000; n_paths=1).paths[1].observations
+        ρ = h.β[k]^2 * h.σ_market^2 / Statistics.var(obs)
+        branch = "plain"
+        if h.r²[k] >= h.r2_preserve_threshold
+            branch = "preserve"
+        elseif ρ > 1.0 - h.idiosyncratic_floor
+            branch = "clip"
+        end
+        println("hybrid_branches ", h.tickers[k], " r²=", round(h.r²[k]; digits=3), " rho=", round(ρ; digits=3), " ", branch)
+    end
+    copy!(Random.default_rng(), saved)
 end
 
 """
