@@ -25,7 +25,8 @@
     ᾱ = mean(α̂)
     pulled = JumpHMM.build(JumpHMM.MySectorFactorModel, merge(data, (
         intercept_pull = 0.5, market_model = m.market_model, sector_models = m.sector_models, own_models = m.own_models)))
-    @test pulled.α == ᾱ .+ 0.5 .* (α̂ .- ᾱ)
+    # this checks the formula, so it allows the last bit to differ across Julia versions -
+    @test isapprox(pulled.α, ᾱ .+ 0.5 .* (α̂ .- ᾱ); rtol = 1e-12)
 
     # build rejects a missing market ticker and a sector list of the wrong length -
     @test_throws ArgumentError JumpHMM.build(JumpHMM.MySectorFactorModel, merge(data, (market = "QQQ",)))
