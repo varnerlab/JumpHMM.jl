@@ -316,8 +316,6 @@ function simulate(portfolio::MyPortfolioModel, number_of_steps::Int64; number_of
             results[portfolio.market_ticker].states[:, p] = sample.m_states;
             results[portfolio.market_ticker].episodes[:, p] = sample.episodes;
         end
-    else
-        throw(ArgumentError("unsupported dependence model: $(typeof(dep))"));
     end
 
     # return -
