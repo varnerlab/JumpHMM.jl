@@ -1239,3 +1239,236 @@ function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFact
     # return -
     return m;
 end
+
+"""
+    build(model::Type{MyPortfolioModel}, data::NamedTuple) -> MyPortfolioModel
+
+Fit a model of several assets: one hidden Markov model for each asset, and a dependence model that links the assets.
+The dependence model is a Gaussian, Student-t, or vine copula fit to the growth rates of all the assets, a single-index model,
+a hybrid single-index model, or a sector factor model. The single-index, hybrid, and sector factor models use a market,
+and a portfolio built from one of them leaves the market ticker out of `tickers`.
+
+### Arguments
+- `model::Type{MyPortfolioModel}`: The type to build
+- `data::NamedTuple`: The inputs. The required keys are:
+    - `tickers::Array{String,1}`: The label of each column of `prices`
+    - `prices::Array{Float64,2}`: The prices, one row per day and one column per ticker
+    - `dependence::Type`: The type of the dependence model: `MyGaussianCopulaModel`, `MyStudentTCopulaModel`, `MyVineCopulaModel`, `MySingleIndexDependenceModel`, `MyHybridSingleIndexDependenceModel`, or `MySectorFactorModel`
+    - `number_of_states::Int64`: The number of states of each hidden Markov model
+    - `ν::Float64`: The degrees of freedom of the Student-t emission distributions
+
+### Returns
+- `MyPortfolioModel`: The fitted model
+
+### Optional Arguments
+The optional keys of `data` and their defaults are:
+- `market::String`: The ticker of the market. It is required for the single-index, hybrid, and sector factor models, and it must be in `tickers`. The default is `""`
+- `rf::Float64`: The risk-free rate, per year, used for the growth rates of the prices. The default is `0.0`
+- `Δt::Float64`: The time step of the growth rates, in years. The default is `1/252`
+- `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. The default is `2`
+- `residual_method::Symbol`: How a single-index model draws the residuals, either `:bootstrap` or `:gaussian`. The default is `:bootstrap`
+- `sectors::Array{String,1}`: The sector label of each ticker except the market. It is required for the sector factor model. The default is `String[]`
+- `sector_options::NamedTuple`: More optional keys for the build of the sector factor model, for example `(center_steps = 20_000,)`. The default is `NamedTuple()`
+
+### Example
+```julia
+portfolio = JumpHMM.build(JumpHMM.MyPortfolioModel, (
+    tickers = tickers,
+    prices = P,
+    dependence = JumpHMM.MyStudentTCopulaModel,
+    number_of_states = 20,
+    ν = 5.0
+));
+```
+"""
+function build(model::Type{MyPortfolioModel}, data::NamedTuple)::MyPortfolioModel
+
+    # check: the required keys are present -
+    if haskey(data, :tickers) == false
+        throw(ArgumentError("tickers is required"));
+    end
+    if haskey(data, :prices) == false
+        throw(ArgumentError("prices is required"));
+    end
+    if haskey(data, :dependence) == false
+        throw(ArgumentError("dependence is required"));
+    end
+    if haskey(data, :number_of_states) == false
+        throw(ArgumentError("number_of_states is required"));
+    end
+    if haskey(data, :ν) == false
+        throw(ArgumentError("ν is required"));
+    end
+    tickers = data.tickers;
+    prices = data.prices;
+    dependence = data.dependence;
+    number_of_states = data.number_of_states;
+    ν = data.ν;
+
+    # set the optional keys to their defaults, then replace the ones that were given -
+    market = "";
+    rf = 0.0;
+    Δt = 1/252;
+    min_obs = 2;
+    residual_method = :bootstrap;
+    sectors = String[];
+    sector_options = NamedTuple();
+    if haskey(data, :market) == true
+        market = data.market;
+    end
+    if haskey(data, :rf) == true
+        rf = data.rf;
+    end
+    if haskey(data, :Δt) == true
+        Δt = data.Δt;
+    end
+    if haskey(data, :min_obs) == true
+        min_obs = data.min_obs;
+    end
+    if haskey(data, :residual_method) == true
+        residual_method = data.residual_method;
+    end
+    if haskey(data, :sectors) == true
+        sectors = data.sectors;
+    end
+    if haskey(data, :sector_options) == true
+        sector_options = data.sector_options;
+    end
+
+    # check: one ticker for each column of prices -
+    number_of_columns = size(prices, 2);
+    if length(tickers) != number_of_columns
+        throw(ArgumentError("tickers has $(length(tickers)) labels but prices has $(number_of_columns) columns"));
+    end
+
+    # check: the dependence type is one we know, and the market and sectors it needs are given -
+    is_copula = (dependence <: MyGaussianCopulaModel) || (dependence <: MyStudentTCopulaModel) || (dependence <: MyVineCopulaModel);
+    is_single_index = dependence <: MySingleIndexDependenceModel;
+    is_hybrid = dependence <: MyHybridSingleIndexDependenceModel;
+    is_sector = dependence <: MySectorFactorModel;
+    if (is_copula || is_single_index || is_hybrid || is_sector) == false
+        throw(ArgumentError("unsupported dependence model: $(dependence)"));
+    end
+    if (is_single_index || is_hybrid || is_sector) == true
+        if isempty(market) == true
+            throw(ArgumentError("market is required for $(dependence)"));
+        end
+    end
+    if is_sector == true
+        if isempty(sectors) == true
+            throw(ArgumentError("sectors (one label for each ticker except the market) is required for $(dependence)"));
+        end
+    end
+
+    # the column of each ticker in the price matrix -
+    tickers_map = Dict{String,Int64}();
+    for j ∈ 1:number_of_columns
+        tickers_map[tickers[j]] = j;
+    end
+
+    # build an empty model, and fill in the fields that every dependence type shares -
+    m = MyPortfolioModel();
+    m.tickers_map = tickers_map;
+    m.market_ticker = market;
+    m.rf = rf;
+    m.Δt = Δt;
+
+    # copula: a hidden Markov model for each asset, then a copula fit to the growth rates of all the assets -
+    if is_copula == true
+        marginals = Dict{String,MyJumpHiddenMarkovModel}();
+        for j ∈ 1:number_of_columns
+            marginals[tickers[j]] = build(MyJumpHiddenMarkovModel, (
+                growth_rates = excess_growth_rates(prices[:, j]; rf = rf, Δt = Δt),
+                number_of_states = number_of_states,
+                ν = ν,
+                Δt = Δt,
+                min_obs = min_obs
+            ));
+        end
+        growth_rates = excess_growth_rates(prices; rf = rf, Δt = Δt);
+        m.tickers = copy(tickers);
+        m.marginals = marginals;
+        m.dependence = build(dependence, (growth_rates = growth_rates,));
+    end
+
+    # single index: the single-index model, then a hidden Markov model for each asset except the market -
+    if is_single_index == true
+        market_index = findfirst(==(market), tickers);
+        if isnothing(market_index) == true
+            throw(ArgumentError("the market ticker $(market) is not in tickers"));
+        end
+        asset_columns = Array{Int64,1}();
+        for j ∈ 1:number_of_columns
+            if j != market_index
+                push!(asset_columns, j);
+            end
+        end
+        growth_rates = excess_growth_rates(prices; rf = rf, Δt = Δt);
+        dependence_model = build(dependence, (
+            growth_rates = growth_rates[:, asset_columns],
+            market_growth_rates = growth_rates[:, market_index],
+            market_prices = prices[:, market_index],
+            number_of_states = number_of_states,
+            ν = ν,
+            rf = rf,
+            Δt = Δt,
+            min_obs = min_obs,
+            residual_method = residual_method
+        ));
+        marginals = Dict{String,MyJumpHiddenMarkovModel}();
+        for j ∈ asset_columns
+            marginals[tickers[j]] = build(MyJumpHiddenMarkovModel, (
+                growth_rates = excess_growth_rates(prices[:, j]; rf = rf, Δt = Δt),
+                number_of_states = number_of_states,
+                ν = ν,
+                Δt = Δt,
+                min_obs = min_obs
+            ));
+        end
+        m.tickers = tickers[asset_columns];
+        m.marginals = marginals;
+        m.dependence = dependence_model;
+    end
+
+    # hybrid single index: the model holds the hidden Markov models of the assets, and the portfolio shares them -
+    if is_hybrid == true
+        dependence_model = build(dependence, (
+            tickers = tickers,
+            prices = prices,
+            market = market,
+            number_of_states = number_of_states,
+            ν = ν,
+            rf = rf,
+            Δt = Δt,
+            min_obs = min_obs
+        ));
+        m.tickers = dependence_model.tickers;
+        m.marginals = dependence_model.marginals;
+        m.dependence = dependence_model;
+    end
+
+    # sector factor: the model holds the own models, so the marginals are the own models in the order of the tickers -
+    if is_sector == true
+        dependence_model = build(dependence, merge((
+            tickers = tickers,
+            prices = prices,
+            market = market,
+            sector = sectors,
+            number_of_states = number_of_states,
+            ν = ν,
+            rf = rf,
+            Δt = Δt,
+            min_obs = min_obs
+        ), sector_options));
+        marginals = Dict{String,MyJumpHiddenMarkovModel}();
+        for i ∈ eachindex(dependence_model.tickers)
+            marginals[dependence_model.tickers[i]] = dependence_model.own_models[i];
+        end
+        m.tickers = dependence_model.tickers;
+        m.marginals = marginals;
+        m.dependence = dependence_model;
+    end
+
+    # return -
+    return m;
+end
