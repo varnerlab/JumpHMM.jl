@@ -36,7 +36,7 @@ The dependence model sets which other keys the build needs, and which tickers th
 | `MyHybridSingleIndexDependenceModel` | yes | no | every ticker except the market |
 | `MySectorFactorModel` | yes | yes | every ticker except the market |
 
-The key `market` names the ticker of the market, which must be in `tickers`. For a sector factor portfolio, the key `sector` holds one sector label for each ticker except the market, as in the sector factor build. The key `sector_options` passes more keys to the sector factor build, for example `(center_steps = 20_000, β_scale = fill(0.3, 4))`.
+The key `market` names the ticker of the market, which must be in `tickers`. For a sector factor portfolio, the key `sector` holds one sector label for each ticker except the market, as in the sector factor build. The key `sector_options` passes more keys to the sector factor build, for example `(β_scale = fill(0.3, 4),)`.
 
 The single-index model also takes `residual_method`, which the [Single-Index Models](single_index.md) page explains. Every portfolio takes `min_obs`, as the single-asset build does.
 
@@ -45,7 +45,7 @@ The [`tune`](@ref tune(::MyPortfolioModel, ::Array{Float64,2})) function tunes e
 
 - __Copula:__ We tune the model of each asset on the growth rates of that asset.
 - __Single-index and hybrid:__ We tune the model of each asset and the market model. A hybrid portfolio then tunes the models of the assets that the hybrid model holds, in a second pass.
-- __Sector factor:__ We tune the market model, each sector model, and each own model. Then we draw the long-run mean of each own model (`ε_center`) again. The own scales `ψ` stay as they are.
+- __Sector factor:__ We tune the market model, each sector model, and each own model. The own scales `ψ` stay as they are.
 
 The keywords are those of the single-asset `tune`, except that `p_neg` and `N_tail` default to `nothing`, which keeps the values of each model. With a `seed`, we reseed the global random number generator before each model is tuned.
 

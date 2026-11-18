@@ -5,7 +5,7 @@
     # build, tune, and simulate -
     pf = JumpHMM.build(JumpHMM.MyPortfolioModel, (
         tickers = tickers, prices = P, dependence = JumpHMM.MySectorFactorModel, market = "SPY", sector = inputs["sectors"],
-        number_of_states = 20, ν = 5.0, sector_options = (center_steps = 20_000,)))
+        number_of_states = 20, ν = 5.0))
     pt = JumpHMM.tune(pf, P; ϵ_range = [1e-4, 3e-3], λ_range = [10.0, 100.0], number_of_paths = 5, seed = 15)
     @test pt isa JumpHMM.MyPortfolioModel
     dep = pt.dependence
@@ -14,11 +14,23 @@
     @test [m.ϵ for m ∈ dep.own_models] == reference["portfolio/tuned/own_ϵ"]
     @test [m.λ for m ∈ dep.own_models] == reference["portfolio/tuned/own_λ"]
 
-    # the simulated matrices, one set for each ticker, the market included -
+    # the long-run means that 0.4.1 subtracted after tuning: the mean of one 20_000-day draw of each tuned own model,
+    # seeded with 4 * 10^12 + i, as the 0.4.1 reference was built -
+    ε_center = old_own_centers(dep.own_models, 20_000, 4 * 10^12)
+
+    # the simulated matrices, one set for each ticker, the market included. Version 0.6.0 no longer subtracts ε_center,
+    # so each asset path is the 0.4.1 path plus ψ_j ε_center[j]. The market paths are unchanged -
     paths = JumpHMM.simulate(pt, 300; number_of_paths = 3, seed = 16)
     @test sort(collect(keys(paths))) == sort(tickers)
     for ticker ∈ tickers
-        @test paths[ticker].growth_rates == reference["portfolio/simulate/" * ticker * "/growth_rates"]
+        reference_growth_rates = reference["portfolio/simulate/" * ticker * "/growth_rates"]
+        j = asset_position(dep.tickers, ticker)
+        if j == 0
+            @test paths[ticker].growth_rates == reference_growth_rates
+        else
+            shift = fill(dep.ψ[j] * ε_center[j], size(reference_growth_rates, 2))
+            @test centered_columns_match(paths[ticker].growth_rates, reference_growth_rates, ones(length(shift)), shift)
+        end
         @test paths[ticker].states == reference["portfolio/simulate/" * ticker * "/states"]
         @test paths[ticker].episodes == reference["portfolio/simulate/" * ticker * "/episodes"]
     end
@@ -89,7 +101,7 @@ end
     # the time step in sector_options is the one the portfolio stores and validates with -
     ps = JumpHMM.build(JumpHMM.MyPortfolioModel, (
         tickers = inputs["tickers"], prices = P, dependence = JumpHMM.MySectorFactorModel, market = "SPY",
-        sector = inputs["sectors"], number_of_states = 20, ν = 5.0, sector_options = (Δt = 1/12, center_steps = 1000)))
+        sector = inputs["sectors"], number_of_states = 20, ν = 5.0, sector_options = (Δt = 1/12,)))
     @test ps.Δt == 1/12
     reports = JumpHMM.validate(ps, P; number_of_paths = 1, seed = 7)
     for ticker ∈ ["ADP", "AFL"]
@@ -127,7 +139,7 @@ end
     # the order of the marginals sets which model draws first when a portfolio is tuned or validated without a seed -
     portfolios = [
         ("sector", JumpHMM.build(T, merge(base, (dependence = JumpHMM.MySectorFactorModel, market = "SPY",
-            sector = inputs["sectors"], sector_options = (center_steps = 1000,))))),
+            sector = inputs["sectors"])))),
         ("gauss", JumpHMM.build(T, merge(base, (dependence = JumpHMM.MyGaussianCopulaModel,)))),
         ("hybrid", JumpHMM.build(T, merge(base, (dependence = JumpHMM.MyHybridSingleIndexDependenceModel, market = "SPY")))),
     ]

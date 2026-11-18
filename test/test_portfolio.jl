@@ -115,8 +115,7 @@ struct UnknownDependenceModel <: JumpHMM.AbstractDependenceModel end
 
     # a sector factor portfolio validates each own model on its level series -
     sp = JumpHMM.build(T, (tickers = inputs["tickers"], prices = inputs["prices"], number_of_states = 20, ν = 5.0,
-        dependence = JumpHMM.MySectorFactorModel, market = "SPY", sector = inputs["sectors"],
-        sector_options = (center_steps = 20_000,)))
+        dependence = JumpHMM.MySectorFactorModel, market = "SPY", sector = inputs["sectors"]))
     reports = JumpHMM.validate(sp, inputs["prices"]; number_of_paths = 5, seed = 3)
     dep = sp.dependence
     @test length(reports) == length(dep.tickers)

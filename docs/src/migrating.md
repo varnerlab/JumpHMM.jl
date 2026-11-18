@@ -4,7 +4,7 @@
 CurrentModule = JumpHMM
 ```
 
-Version 0.5.0 renames the types, functions, and settings of version 0.4.1, and every model is now made with one `build` function. The old names are gone, with no aliases. With the same inputs and seeds, version 0.5.0 gives the same numbers as version 0.4.1, except for the three changes in [Numbers that differ from 0.4.1](@ref).
+Version 0.5.0 renames the types, functions, and settings of version 0.4.1, and every model is now made with one `build` function. The old names are gone, with no aliases. With the same inputs and seeds, version 0.5.0 gives the same numbers as version 0.4.1, except for the three changes in [Numbers that differ from 0.4.1](@ref). Version 0.6.0 removes the centering of the own draw of the sector factor model, the fourth change in that list.
 
 ## General rules
 Most changes follow a few rules:
@@ -19,11 +19,12 @@ Most changes follow a few rules:
 The tables below write the names without the `JumpHMM.` prefix to save space. Write the prefix in your code.
 
 ## Numbers that differ from 0.4.1
-Three results differ from version 0.4.1 on purpose:
+Four results differ from version 0.4.1 on purpose:
 
 - __Hellinger distance:__ The function `hellinger_distance` counts every value of the two samples, where the 0.4.1 histogram left out the largest value.
 - __Tail settings in tune:__ The function `tune` keeps the `p_neg` and `N_tail` of the input model when the call does not pass them, where version 0.4.1 reset them to `0.52` and `5`.
 - __Frank copula at θ = 0:__ A Frank copula with `θ = 0.0` uses the formulas of the independence copula, where in version 0.4.1 the h-function returned `NaN`, its inverse returned a meaningless `3.8e-9` from bisection, and the log-density was `-Inf`, so the vine fit never selected such an edge.
+- __Own draw of the sector factor model (0.6.0):__ The own draw is no longer centered, because each own model is fit to the residual after the sector term, which averages zero in the data. Version 0.4.1 subtracted `ε_center`, the mean of one long draw of the own model, which was mostly simulation noise. The composed growth rate of asset `i` is now `α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i ε_i(t)`, which equals the 0.4.1 result plus `ψ_i ε_center[i]` on every day. The keys `center_steps` and `center_seed` and the field `ε_center` are gone.
 
 ## Types
 

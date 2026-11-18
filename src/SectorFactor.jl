@@ -553,10 +553,11 @@ end
 
 """
     compose_name(α::Array{Float64,1}, β::Array{Float64,1}, δ::Float64, g_m::Array{Float64,1}, f::Array{Float64,1},
-        ε::Array{Float64,1}; ψ::Float64, ε_center::Float64) -> NamedTuple
+        ε::Array{Float64,1}; ψ::Float64) -> NamedTuple
 
-Compose the daily growth rate of one asset: `g[t] = α[t] + β[t] g_m[t] + δ f[t] + ψ (ε[t] - ε_center)`.
-The own draw `ε` comes from the model of the residual of the asset after its sector term, and `ε_center` is the long-run mean of that model.
+Compose the daily growth rate of one asset: `g[t] = α[t] + β[t] g_m[t] + δ f[t] + ψ ε[t]`.
+The own draw `ε` comes from the model of the residual of the asset after its sector term. That residual averages zero in the data,
+so the own draw is not centered.
 
 ### Arguments
 - `α::Array{Float64,1}`: The intercept on each day, in 1/year
@@ -566,7 +567,6 @@ The own draw `ε` comes from the model of the residual of the asset after its se
 - `f::Array{Float64,1}`: The draw of the sector factor of the asset, in 1/year
 - `ε::Array{Float64,1}`: The own draw of the asset, in 1/year
 - `ψ::Float64`: A required keyword. The scale of the own draw, at least `0` (`own_scale`)
-- `ε_center::Float64`: A required keyword. The long-run mean of the own model, in 1/year
 
 ### Returns
 - `NamedTuple`: The composed asset.
@@ -575,11 +575,11 @@ The own draw `ε` comes from the model of the residual of the asset after its se
 
 ### Example
 ```julia
-out = JumpHMM.compose_name(fill(0.05, 252), fill(1.1, 252), 0.8, g_m, f, ε; ψ = 1.2, ε_center = 0.01);
+out = JumpHMM.compose_name(fill(0.05, 252), fill(1.1, 252), 0.8, g_m, f, ε; ψ = 1.2);
 ```
 """
 function compose_name(α::Array{Float64,1}, β::Array{Float64,1}, δ::Float64, g_m::Array{Float64,1},
-    f::Array{Float64,1}, ε::Array{Float64,1}; ψ::Float64, ε_center::Float64)::NamedTuple
+    f::Array{Float64,1}, ε::Array{Float64,1}; ψ::Float64)::NamedTuple
 
     # check: every path has one value per day, and the scale is not negative -
     T = length(g_m);
@@ -591,7 +591,7 @@ function compose_name(α::Array{Float64,1}, β::Array{Float64,1}, δ::Float64, g
     end
 
     # compose the growth rate of each day -
-    g = α .+ β .* g_m .+ δ .* f .+ ψ .* (ε .- ε_center);
+    g = α .+ β .* g_m .+ δ .* f .+ ψ .* ε;
 
     # return -
     return (g = g, β_path = copy(β));
@@ -659,7 +659,7 @@ function compose_name(model::MySectorFactorModel, draws::NamedTuple, j::Int64; �
 
     # compose the market, sector, and own draws of asset j -
     return compose_name(fill(α_j, number_of_steps), β, model.δ[j], draws.g_m, draws.F[:, s], draws.E[:, j];
-        ψ = ψ, ε_center = model.ε_center[j]);
+        ψ = ψ);
 end
 
 """
@@ -722,8 +722,7 @@ Make a new sector factor model with new intercepts `α`, a new half-life of the 
 own scales `ψ` for the new drift (`own_scales`). The new model shares every other field with `model`, including the fitted hidden
 Markov models and the level series. Changing one of those shared fields in place changes both models. The input model is not changed.
 
-Make a `deepcopy` of `model` before a study that edits its fitted hidden Markov models. After such an edit, call `build` again with the keys
-`market_model`, `sector_models`, and `own_models`, so that `ε_center` is computed from the changed models.
+Make a `deepcopy` of `model` before a study that edits its fitted hidden Markov models, because the new model shares them.
 
 ### Arguments
 - `model::MySectorFactorModel`: The sector factor model
@@ -775,7 +774,6 @@ function with_parameters(model::MySectorFactorModel; α::Array{Float64,1} = mode
     m.σ²_own = model.σ²_own;
     m.σ²_u = model.σ²_u;
     m.σ²_m = model.σ²_m;
-    m.ε_center = model.ε_center;
 
     # the new parameters: copies of the given intercepts and drift scales, and the new half-life -
     m.α = copy(α);
@@ -791,10 +789,6 @@ function with_parameters(model::MySectorFactorModel; α::Array{Float64,1} = mode
     m.own_models = model.own_models;
     m.sector_levels = model.sector_levels;
     m.own_levels = model.own_levels;
-
-    # the centering draw settings: shared with the input model -
-    m.center_steps = model.center_steps;
-    m.center_seed = model.center_seed;
 
     # return -
     return m;

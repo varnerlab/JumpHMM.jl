@@ -380,12 +380,12 @@ end
     mutable struct MySectorFactorModel <: AbstractDependenceModel
 
 The `MySectorFactorModel` mutable struct holds a model with one market model, one model for each sector, and one own model for each asset:
-`g_i(t) = α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i (ε_i(t) - ε_center[i])`.
-The own model of an asset is fit to the residual of the single-index fit after the sector term.
+`g_i(t) = α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i ε_i(t)`.
+The own model of an asset is fit to the residual of the single-index fit after the sector term. This residual averages zero in the data,
+so the own draw is not centered.
 The assets are linked only through the market draw and the sector draw on the same day.
 
-To change the intercepts or the drift of `β`, use `with_parameters`. After changing the market model, a sector model, or an own model,
-call `build` again with the keys `market_model`, `sector_models`, and `own_models`, so that `ε_center` is computed from the changed models.
+To change the intercepts or the drift of `β`, use `with_parameters`.
 
 ### Required fields
 - `tickers::Array{String,1}`: The assets, without the market, in fit order
@@ -400,7 +400,6 @@ call `build` again with the keys `market_model`, `sector_models`, and `own_model
 - `σ²_own::Array{Float64,1}`: The residual variance left to the own term of each asset
 - `σ²_u::Array{Float64,1}`: The variance of the training series of each own model
 - `σ²_m::Float64`: The variance of the growth rate of the market over the fit window
-- `ε_center::Array{Float64,1}`: The long-run mean of each own model
 - `β_halflife::Float64`: The half-life of the drift of `β`, in trading days
 - `β_scale::Array{Float64,1}`: The drift scale of `β` for each asset. A value of `0.0` keeps `β` fixed
 - `market_model::MyJumpHiddenMarkovModel`: The hidden Markov model of the market
@@ -408,8 +407,6 @@ call `build` again with the keys `market_model`, `sector_models`, and `own_model
 - `own_models::Array{MyJumpHiddenMarkovModel,1}`: The own hidden Markov model of each asset, in the order of `tickers`
 - `sector_levels::Array{Float64,2}`: The compounded sector-factor series, used when tuning
 - `own_levels::Array{Float64,2}`: The compounded own-residual series, used when tuning
-- `center_steps::Int64`: The length of the draw that sets the noise center of each asset
-- `center_seed::Int64`: The seed offset of the centering draw. Asset `i` uses `center_seed + i`
 """
 mutable struct MySectorFactorModel <: AbstractDependenceModel
 
@@ -426,7 +423,6 @@ mutable struct MySectorFactorModel <: AbstractDependenceModel
     σ²_own::Array{Float64,1}
     σ²_u::Array{Float64,1}
     σ²_m::Float64
-    ε_center::Array{Float64,1}
     β_halflife::Float64
     β_scale::Array{Float64,1}
     market_model::MyJumpHiddenMarkovModel
@@ -434,8 +430,6 @@ mutable struct MySectorFactorModel <: AbstractDependenceModel
     own_models::Array{MyJumpHiddenMarkovModel,1}
     sector_levels::Array{Float64,2}
     own_levels::Array{Float64,2}
-    center_steps::Int64
-    center_seed::Int64
 
     # constructor -
     MySectorFactorModel() = new();

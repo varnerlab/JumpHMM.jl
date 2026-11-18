@@ -74,7 +74,7 @@ end
         (JumpHMM.MySectorFactorModel, (tickers = tickers, prices = P, market = "SPY", sector = sectors,
             number_of_states = 10, ν = 5.0, β_halflife = 0.0), "β_halflife"),
         (JumpHMM.MySectorFactorModel, (tickers = tickers, prices = P, market = "SPY", sector = sectors,
-            number_of_states = 10, ν = 5.0, center_steps = 2.0e4), "center_steps"),
+            number_of_states = 10, ν = 5.0, center_steps = 20_000), "center_steps"),
         (JumpHMM.MySectorFactorModel, (tickers = tickers, prices = P, market = "SPY", sectors = sectors,
             number_of_states = 10, ν = 5.0), "sectors"),
         (PT, (tickers = tickers, prices = P, number_of_states = 10, ν = 5.0, dependence = JumpHMM.MyGaussianCopulaModel,

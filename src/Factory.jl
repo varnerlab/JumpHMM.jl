@@ -1105,15 +1105,15 @@ end
 """
     build(model::Type{MySectorFactorModel}, data::NamedTuple) -> MySectorFactorModel
 
-Fit a sector factor model from a matrix of prices: `g_i(t) = α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i (ε_i(t) - ε_center[i])`.
+Fit a sector factor model from a matrix of prices: `g_i(t) = α_i + β_i(t) g_m(t) + δ_i f_s(t) + ψ_i ε_i(t)`.
 We regress the growth rates of each asset on the growth rates of the market to get `α`, `β`, `r²`, and the residuals.
 The factor of a sector is the mean residual of its assets (`sector_factors`), and `δ` is the sector loading of each asset (`sector_loadings`).
 The own model of each asset is fit to its residual after the sector term (`own_residuals`).
 
 We build a hidden Markov model of the growth rates of the market, of each sector factor, and of each leftover residual. We fit the sector and
-own models to level series that start at `100.0` and compound the factor or residual, with `rf = 0`. The long-run mean
-`ε_center[i]` of own model `i` is the mean of one `center_steps`-day draw, seeded with `center_seed + i`. The scale `ψ` of each own draw
-follows from `own_variances` and the drift of `β` (`own_scale`).
+own models to level series that start at `100.0` and compound the factor or residual, with `rf = 0`. The residual after the sector term
+averages zero in the data, so the own draw is not centered. The scale `ψ` of each own draw follows from `own_variances` and the drift of
+`β` (`own_scale`).
 
 ### Arguments
 - `model::Type{MySectorFactorModel}`: The type to build
@@ -1136,11 +1136,9 @@ The optional keys of `data` and their defaults are:
 - `intercept_pull::Float64`: How much of its distance from the mean intercept each `α` keeps: `α = ᾱ + intercept_pull (α̂ - ᾱ)`. A value of `1.0` keeps the fitted intercepts, and `0.0` gives every asset the mean intercept. Default: `1.0`
 - `β_halflife::Float64`: The half-life of the drift of `β`, in trading days. Default: `126.0`
 - `β_scale::Union{Array{Float64,1},Nothing}`: The drift scale of `β` for each asset. If `nothing`, every scale is `0.0`, which keeps `β` fixed. Default: `nothing`
-- `center_steps::Int64`: The length of the draw that sets the long-run mean of each own model. Default: `1_000_000`
-- `center_seed::Int64`: The seed offset of the centering draws. Asset `i` uses `center_seed + i`. Default: `4 * 10^12`
 - `market_model::Union{MyJumpHiddenMarkovModel,Nothing}`: A market model to use instead of the one we would fit. Default: `nothing`
 - `sector_models::Union{Array{MyJumpHiddenMarkovModel,1},Nothing}`: The sector models to use instead of the ones we would fit, one per sector, in sorted label order. Default: `nothing`
-- `own_models::Union{Array{MyJumpHiddenMarkovModel,1},Nothing}`: The own models to use instead of the ones we would fit, one per asset, in asset order. We compute `ε_center` from the own models the model stores. Default: `nothing`
+- `own_models::Union{Array{MyJumpHiddenMarkovModel,1},Nothing}`: The own models to use instead of the ones we would fit, one per asset, in asset order. Default: `nothing`
 
 ### Example
 ```julia
@@ -1158,7 +1156,7 @@ function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFact
 
     # check: every key is one we know -
     _check_keys(data, [:tickers, :prices, :market, :sector, :number_of_states, :ν, :rf, :Δt, :min_obs, :intercept_pull,
-        :β_halflife, :β_scale, :center_steps, :center_seed, :market_model, :sector_models, :own_models], model);
+        :β_halflife, :β_scale, :market_model, :sector_models, :own_models], model);
 
     # check: the required keys are present -
     if haskey(data, :tickers) == false
@@ -1193,8 +1191,6 @@ function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFact
     intercept_pull = 1.0;
     β_halflife = 126.0;
     β_scale = nothing;
-    center_steps = 1_000_000;
-    center_seed = 4 * 10^12;
     market_model = nothing;
     sector_models = nothing;
     own_models = nothing;
@@ -1215,12 +1211,6 @@ function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFact
     end
     if haskey(data, :β_scale) == true
         β_scale = data.β_scale;
-    end
-    if haskey(data, :center_steps) == true
-        center_steps = data.center_steps;
-    end
-    if haskey(data, :center_seed) == true
-        center_seed = data.center_seed;
     end
     if haskey(data, :market_model) == true
         market_model = data.market_model;
@@ -1245,18 +1235,13 @@ function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFact
     _check_type(:intercept_pull, intercept_pull, Float64);
     _check_type(:β_halflife, β_halflife, Float64);
     _check_type(:β_scale, β_scale, Union{Array{Float64,1},Nothing});
-    _check_type(:center_steps, center_steps, Int64);
-    _check_type(:center_seed, center_seed, Int64);
     _check_type(:market_model, market_model, Union{MyJumpHiddenMarkovModel,Nothing});
     _check_type(:sector_models, sector_models, Union{Array{MyJumpHiddenMarkovModel,1},Nothing});
     _check_type(:own_models, own_models, Union{Array{MyJumpHiddenMarkovModel,1},Nothing});
 
-    # check: the half-life of the drift and the length of the centering draw are positive -
+    # check: the half-life of the drift is positive -
     if (β_halflife > 0.0) == false
         throw(ArgumentError("β_halflife must be greater than 0, got $(β_halflife)"));
-    end
-    if (center_steps >= 1) == false
-        throw(ArgumentError("center_steps must be at least 1, got $(center_steps)"));
     end
 
     # check: the tickers match the columns, and the market is one of them -
@@ -1396,14 +1381,6 @@ function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFact
         end
     end
 
-    # the long-run mean of each own model: the mean of one long draw, seeded with center_seed + i.
-    # We take the mean of the whole draw at once, so the sum adds in the same order as the earlier version -
-    ε_center = zeros(number_of_assets);
-    for i ∈ 1:number_of_assets
-        center_path = simulate(own_models[i], center_steps; number_of_paths = 1, seed = center_seed + i);
-        ε_center[i] = mean(center_path.growth_rates[:, 1]);
-    end
-
     # the scale of each own draw under this drift of β -
     ψ = zeros(number_of_assets);
     for i ∈ 1:number_of_assets
@@ -1425,7 +1402,6 @@ function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFact
     m.σ²_own = variances.σ²_own;
     m.σ²_u = variances.σ²_u;
     m.σ²_m = σ²_m;
-    m.ε_center = ε_center;
     m.β_halflife = β_halflife;
     m.β_scale = β_scale;
     m.market_model = market_model;
@@ -1433,8 +1409,6 @@ function build(model::Type{MySectorFactorModel}, data::NamedTuple)::MySectorFact
     m.own_models = own_models;
     m.sector_levels = sector_levels;
     m.own_levels = own_levels;
-    m.center_steps = center_steps;
-    m.center_seed = center_seed;
 
     # return -
     return m;
@@ -1468,7 +1442,7 @@ The optional keys of `data` and their defaults are:
 - `min_obs::Int64`: The fewest growth rates a state needs to use its own emission estimates. Default: `2`
 - `residual_method::Symbol`: How a single-index model draws the residuals, either `:bootstrap` or `:gaussian`. Default: `:bootstrap`
 - `sector::Array{String,1}`: The sector label of each ticker except the market. It is required for the sector factor model. Default: `String[]`
-- `sector_options::NamedTuple`: More optional keys for the build of the sector factor model, for example `(center_steps = 20_000,)`. Default: `NamedTuple()`
+- `sector_options::NamedTuple`: More optional keys for the build of the sector factor model, for example `(β_halflife = 63.0,)`. Default: `NamedTuple()`
 
 ### Example
 ```julia

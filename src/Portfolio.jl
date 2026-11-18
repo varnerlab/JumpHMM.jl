@@ -62,8 +62,7 @@ What we tune depends on the dependence model of the portfolio. A copula portfoli
 portfolio also tunes the market model. A hybrid portfolio tunes the model of each asset, then the market model, and then the models of the assets
 that the hybrid model holds, in a second pass. A sector factor portfolio tunes the market model on the market prices, each sector model on its level
 series, and each own model on its level series. We turn the level series into growth rates with `rf = 0.0`, because the level series were built with
-`rf = 0.0`. After tuning, we draw the long-run mean of each own model again, with the same `center_steps` and seeds as the portfolio you give.
-The scales `ψ` of the own draws stay as they are.
+`rf = 0.0`. The scales `ψ` of the own draws stay as they are.
 
 We visit the models of the assets in the order of the `marginals` dictionary. Without a `seed`, this order sets which random numbers each model draws.
 
@@ -195,14 +194,7 @@ function tune(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers_map
             tuned_marginals[dep.tickers[i]] = own_models[i];
         end
 
-        # tuning changes the long-run mean of each own model, so draw it again. We take the mean of the whole draw at once, as build does -
-        ε_center = zeros(length(dep.tickers));
-        for i ∈ eachindex(dep.tickers)
-            center_path = simulate(own_models[i], dep.center_steps; number_of_paths = 1, seed = dep.center_seed + i);
-            ε_center[i] = mean(center_path.growth_rates[:, 1]);
-        end
-
-        # a new model with the tuned hidden Markov models and centers, and everything else shared. We do not recompute ψ -
+        # a new model with the tuned hidden Markov models, and everything else shared. We do not recompute ψ -
         tuned_dep = MySectorFactorModel();
         tuned_dep.tickers = dep.tickers;
         tuned_dep.sector = dep.sector;
@@ -216,7 +208,6 @@ function tune(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers_map
         tuned_dep.σ²_own = dep.σ²_own;
         tuned_dep.σ²_u = dep.σ²_u;
         tuned_dep.σ²_m = dep.σ²_m;
-        tuned_dep.ε_center = ε_center;
         tuned_dep.β_halflife = dep.β_halflife;
         tuned_dep.β_scale = dep.β_scale;
         tuned_dep.market_model = market_tuned;
@@ -224,8 +215,6 @@ function tune(portfolio::MyPortfolioModel, prices::Array{Float64,2}; tickers_map
         tuned_dep.own_models = own_models;
         tuned_dep.sector_levels = dep.sector_levels;
         tuned_dep.own_levels = dep.own_levels;
-        tuned_dep.center_steps = dep.center_steps;
-        tuned_dep.center_seed = dep.center_seed;
         dep = tuned_dep;
     end
 

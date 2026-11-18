@@ -7,10 +7,10 @@ CurrentModule = JumpHMM
 The [`MySectorFactorModel`](@ref) type holds a model of many assets, built from three layers of hidden Markov models: one model of the market, one model of each sector, and one own model of each asset. On day ``t``, the growth rate of asset ``i`` in sector ``s`` is
 
 ```math
-g_i(t) = \alpha_i + \beta_i(t)\, g_m(t) + \delta_i\, f_s(t) + \psi_i \left(\varepsilon_i(t) - \bar{\varepsilon}_i\right)
+g_i(t) = \alpha_i + \beta_i(t)\, g_m(t) + \delta_i\, f_s(t) + \psi_i\, \varepsilon_i(t)
 ```
 
-where ``g_m(t)`` is a draw of the market model, ``f_s(t)`` is a draw of the model of sector ``s``, and ``\varepsilon_i(t)`` is a draw of the own model of asset ``i``, all in 1/year. The long-run mean ``\bar{\varepsilon}_i`` of the own model (`ε_center`) centers the own draw. The intercept ``\alpha_i`` (1/year), the market sensitivity ``\beta_i(t)``, the sector loading ``\delta_i``, and the own scale ``\psi_i`` come from the fit below.
+where ``g_m(t)`` is a draw of the market model, ``f_s(t)`` is a draw of the model of sector ``s``, and ``\varepsilon_i(t)`` is a draw of the own model of asset ``i``, all in 1/year. The own draw is not centered, because the own model is fit to a residual that averages zero in the data. The intercept ``\alpha_i`` (1/year), the market sensitivity ``\beta_i(t)``, the sector loading ``\delta_i``, and the own scale ``\psi_i`` come from the fit below.
 
 The assets are linked only through the market draw and the sector draw that they have in common on each day. A copula would reorder the draws of each asset across days, which would break up the volatility clustering and the timing of the jump episodes that each model produces.
 
@@ -76,8 +76,6 @@ path = JumpHMM.sample_dependence(model, 252; seed = 5660);
 path.G                        # the growth rates of the assets (1/year), one row per day and one column per asset
 ```
 
-The build draws one long path of each own model, `center_steps` days long (default `1_000_000`), and takes its mean as ``\bar{\varepsilon}_i``. A smaller `center_steps`, such as `20_000`, builds faster but gives a less precise ``\bar{\varepsilon}_i``.
-
 The keys `market_model`, `sector_models`, and `own_models` pass in models fitted or tuned elsewhere, instead of the models the build would fit. Each own model must describe the residual of its asset after the sector term, the series that `own_levels` holds. The [`build`](@ref build(::Type{MySectorFactorModel}, ::NamedTuple)) docstring lists every optional key and its default.
 
 ## Draws and composition
@@ -128,11 +126,11 @@ end
 The [`compose_name`](@ref compose_name(::MySectorFactorModel, ::NamedTuple, ::Int64)) function composes one asset alone, with its own intercept, half-life, or drift scale for that call. Because `compose` reads only the keys it needs, the `draws` can mix the parts of two draws, for example the market from one draw and the sectors from another.
 
 ## Changing a fitted model
-The build computes the long-run mean ``\bar{\varepsilon}_i`` (`ε_center`) from the fitted own models, and the own scale ``\psi_i`` (`ψ`) from the variances of the data and the drift of ``\beta``. Change the intercepts and the drift of ``\beta`` with [`with_parameters`](@ref), which recomputes ``\psi``.
+The build computes the own scale ``\psi_i`` (`ψ`) from the variances of the data and the drift of ``\beta``. Change the intercepts and the drift of ``\beta`` with [`with_parameters`](@ref), which recomputes ``\psi``.
 
 The functions `compose` and `compose_name` compute the own scale again from the variances. A value written into `ψ` by hand therefore has no effect.
 
-After you change the jump settings or the emissions of the market model, a sector model, or an own model, call the build again with the keys `market_model`, `sector_models`, and `own_models`. The new build computes `ε_center` from the changed models. The rebuild must repeat the settings of the first build, because every key it leaves out takes its default:
+The own scale does not depend on the fitted hidden Markov models. After you change the jump settings or the emissions of the market model, a sector model, or an own model, you can compose with the changed model directly. To get a separate model with the changed models, call the build again with the keys `market_model`, `sector_models`, and `own_models`. The rebuild must repeat the settings of the first build, because every key it leaves out takes its default:
 
 ```julia
 own_models = deepcopy(model.own_models);
@@ -141,8 +139,6 @@ rebuilt = JumpHMM.build(JumpHMM.MySectorFactorModel, (
     tickers = tickers, prices = prices, market = "SPY", sector = sector, number_of_states = 100, ν = 5.0,
     β_scale = model.β_scale,              # the settings of the first build
     β_halflife = model.β_halflife,
-    center_steps = model.center_steps,
-    center_seed = model.center_seed,
     market_model = model.market_model, sector_models = model.sector_models, own_models = own_models
 ));
 ```

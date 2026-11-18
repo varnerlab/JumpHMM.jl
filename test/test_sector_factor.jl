@@ -2,8 +2,7 @@
     P = inputs["prices"]
     tickers = inputs["tickers"]
     sectors = inputs["sectors"]
-    data = (tickers = tickers, prices = P, market = "SPY", sector = sectors, number_of_states = 20, ν = 5.0,
-        center_steps = 20_000)
+    data = (tickers = tickers, prices = P, market = "SPY", sector = sectors, number_of_states = 20, ν = 5.0)
     m = JumpHMM.build(JumpHMM.MySectorFactorModel, data)
     @test m isa JumpHMM.MySectorFactorModel
     @test m.tickers == tickers[2:end]
@@ -15,7 +14,6 @@
     @test given.α == m.α
     @test given.δ == m.δ
     @test given.ψ == m.ψ
-    @test given.ε_center == m.ε_center
     @test given.market_model === m.market_model
     @test given.sector_models[1] === m.sector_models[1]
     @test given.own_models[1] === m.own_models[1]
@@ -27,6 +25,13 @@
         intercept_pull = 0.5, market_model = m.market_model, sector_models = m.sector_models, own_models = m.own_models)))
     # this checks the formula, so it allows the last bit to differ across Julia versions -
     @test isapprox(pulled.α, ᾱ .+ 0.5 .* (α̂ .- ᾱ); rtol = 1e-12)
+
+    # the model has no centering field. The own draw enters the growth rate as ψ times the draw -
+    @test hasfield(JumpHMM.MySectorFactorModel, :ε_center) == false
+    D = JumpHMM.sample_draws(m, 20; seed = 3)
+    one = JumpHMM.compose_name(m, D, 2)
+    β_2 = fill(m.β[2], 20)
+    @test one.g == m.α[2] .+ β_2 .* D.g_m .+ m.δ[2] .* D.F[:, m.sector_index[2]] .+ m.ψ[2] .* D.E[:, 2]
 
     # build rejects a missing market ticker and a sector list of the wrong length -
     @test_throws ArgumentError JumpHMM.build(JumpHMM.MySectorFactorModel, merge(data, (market = "QQQ",)))
